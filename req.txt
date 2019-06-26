@@ -1,4 +1,8 @@
 NMF:
- - nimfa
+ - nimfa (methods.seeding specificly)
 NTF:
+ - nimfa (methods.seeding specificly)
+ - tensorly
+ PARAFAC2:
+ - nimfa (methods.seeding specificly)
  - tensorly

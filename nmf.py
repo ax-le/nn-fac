@@ -14,36 +14,37 @@ from nimfa.methods import seeding
 def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol=1e-8,
            sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
            verbose=False, return_errors=False):
-    
+
     """
     ======================================
     Nonnegative Matrix Factorization (NMF)
     ======================================
-    
+
     Factorization of a matrix M in two nonnegative matrices U and V,
     such that the product UV approximates M.
     If M is of size m*n, U and V are resepctively of size m*r and r*n,
-    r being the rank of the decompisition (parameter)
+    r being the rank of the decomposition (parameter)
     Typically, this method is used as a dimensionality reduction technique,
     or for source separation.
-    
+
     The objective function is:
-    
+
         ||M - UV||_Fro^2
         + sparsity_coefficients[0] * (\sum\limits_{j = 0}^{r}||U[:,k]||_1)
         + sparsity_coefficients[1] * (\sum\limits_{j = 0}^{r}||V[k,:]||_1)
-        
+
     With:
+
         ||A||_Fro^2 = \sum_{i,j} A_{ij}^2 (Frobenius norm)
         ||a||_1 = \sum_{i} abs(a_{i}) (Elementwise L1 norm)
-        
-    The objective function is minimized by fixing alternatively 
+
+    The objective function is minimized by fixing alternatively
     one of both factors U and V and optimizing on the other one,
     the problem being reduced to a Nonnegative Least Squares problem.
-    
+
     More precisely, the chosen optimization algorithm is the HALS [1],
     which updates each factor columnwise, fixing every other columns.
-    
+
     Parameters
     ----------
     data: nonnegative array
@@ -51,7 +52,7 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
     rank: integer
         The rank of the decomposition
     init: "random" | "nndsvd" | "custom" |
-        - If set to random: 
+        - If set to random:
             Initialize with random factors of the correct size.
             The randomization is the uniform distribution in [0,1),
             which is the default from numpy random.
@@ -59,10 +60,10 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
             Corresponds to a Nonnegative Double Singular Value Decomposition
             (NNDSVD) initialization, which is a data based initialization,
             designed for NMF. See [2] for details.
-            This nndsvd if performed via the nimfa toolbox [3].
+            This NNDSVD if performed via the nimfa toolbox [3].
         - If set to custom:
-            U_0 and V_0 (see below) will be used for the initialization 
-        Default: random        
+            U_0 and V_0 (see below) will be used for the initialization
+        Default: random
     U_0: None or array of nonnegative floats
         A custom initialization of U, used only in "custom" init mode.
         Default: None
@@ -74,7 +75,7 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
         Default: 100
     tol: float
         Threshold on the improvement in reconstruction error.
-        Between two iterations, if the reconstruction error difference is 
+        Between two iterations, if the reconstruction error difference is
         below this threshold, the algorithm stops.
         Default: 1e-8
     sparsity_coefficients: List of float (two)
@@ -90,62 +91,63 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
         (columnwise for U, linewise for V)
         Default: [False, False]
     verbose: boolean
-        Indicates whether the algorithm prints the successive 
+        Indicates whether the algorithm prints the successive
         reconstruction errors or not
         Default: False
     return_errors: boolean
         Indicates whether the algorithm should return all reconstruction errors
         and computation time of each iteration or not
         Default: False
-        
+
     Returns
     -------
     U, V: numpy arrays
-        Factors of the NMF 
+        Factors of the NMF
     errors: list
         A list of reconstruction errors at each iteration of the algorithm.
     toc: list
         A list with accumulated time at each iterations
-        
+
     Example
     -------
     >>> import numpy as np
     >>> import nmf
     >>> M = np.array([[1,1], [2,2], [1,3], [4,1], [3.14, 42], [8,8], [4,2], [3,4]])
+    >>> rank = 30
     >>> U, V = nmf.nmf(M, rank, init = "nndsvd",
            sparsity_coefficients = [None, None], fixed_modes = [], normalize = [True, False],
            verbose=False)
-    
+
     References
     ----------
     [1]: N. Gillis and F. Glineur, Accelerated Multiplicative Updates and
     Hierarchical ALS Algorithms for Nonnegative Matrix Factorization,
     Neural Computation 24 (4): 1085-1105, 2012.
-    
-    [2]: Christos Boutsidis and Efstratios Gallopoulos. "SVD based
-    initialization: A head start for nonnegative matrix factorization",
+
+    [2]: C. Boutsidis and E. Gallopoulos. "SVD based
+    initialization: A head start for nonnegative matrix factorization,"
     Pattern Recognition 41.4 (2008), pp. 1350{1362.
-    
-    [3]: Blalz Zupan et al. "Nimfa: A python library for nonnegative matrix
+
+    [3]: B. Zupan et al. "Nimfa: A python library for nonnegative matrix
     factorization", Journal of Machine Learning Research 13.Mar (2012),
     pp. 849{853.
     """
-    
+
     if init.lower() == "random":
         k, n = data.shape
         U_0 = np.random.rand(k, rank)
         V_0 = np.random.rand(rank, n)
-        
+
     elif init.lower() == "nndsvd":
         U_0, V_0 = seeding.Nndsvd().initialize(data, rank, {'flag': 0})
-        
+
     elif init.lower() == "custom":
         if U_0 is None or V_0 is None:
             raise Exception("Custom initialization, but one factor is set to 'None'")
-    
+
     else:
         raise Exception('Initialization type not understood')
-    
+
     return compute_nmf(data, rank, U_0, V_0, n_iter_max=n_iter_max, tol=tol,
                    sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, normalize = normalize,
                    verbose=verbose, return_errors=return_errors)
@@ -157,7 +159,7 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
 def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
            sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
            verbose=False, return_errors=False):
-    """    
+    """
     Computation of a Nonnegative matrix factorization via
     hierarchical alternating least squares (HALS) [1],
     with U_in and V_in as initialization.
@@ -177,7 +179,7 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
         Default: 100
     tol: float
         Threshold on the improvement in reconstruction error.
-        Between two iterations, if the reconstruction error difference is 
+        Between two iterations, if the reconstruction error difference is
         below this threshold, the algorithm stops.
         Default: 1e-8
     sparsity_coefficients: List of float (two)
@@ -193,7 +195,7 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
         (columnwise for U, linewise for V)
         Default: [False, False]
     verbose: boolean
-        Indicates whether the algorithm prints the successive 
+        Indicates whether the algorithm prints the successive
         reconstruction errors or not
         Default: False
     return_errors: boolean
@@ -204,7 +206,7 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
     Returns
     -------
     U, V: numpy arrays
-        Factors of the NMF 
+        Factors of the NMF
     errors: list
         A list of reconstruction errors at each iteration of the algorithm.
     toc: list
@@ -224,7 +226,7 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
     norm_data = np.linalg.norm(data)
     tic = time.time()
     toc = []
-    
+
     if sparsity_coefficients == None:
         sparsity_coefficients = [None, None]
     if fixed_modes == None:
@@ -233,7 +235,7 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
         normalize = [False, False]
 
     for iteration in range(n_iter_max):
-        
+
         # One pass of least squares on each updated mode
         U, V, rec_error = one_nmf_step(data, rank, U, V, norm_data,
                                        sparsity_coefficients, fixed_modes, normalize)
@@ -241,7 +243,7 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
         toc.append(time.time() - tic)
         if tol:
             rec_errors.append(rec_error)
-            
+
             if verbose:
                 if iteration == 0:
                     print('reconstruction error={}'.format(rec_errors[iteration]))
@@ -250,9 +252,10 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
                         print('reconstruction error={}, variation={}.'.format(
                                 rec_errors[-1], rec_errors[-2] - rec_errors[-1]))
                     else:
+                        # print in red when the reconstruction error is negative (shouldn't happen)
                         print('\033[91m' + 'reconstruction error={}, variation={}.'.format(
                                 rec_errors[-1], rec_errors[-2] - rec_errors[-1]) + '\033[0m')
-                    
+
             if iteration > 0 and abs(rec_errors[-2] - rec_errors[-1]) < tol:
                 # Stop condition: relative error between last two iterations < tol
                 if verbose:
@@ -263,14 +266,14 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
         return np.array(U), np.array(V), rec_errors, toc
     else:
         return np.array(U), np.array(V)
-    
-    
+
+
 def one_nmf_step(data, rank, U_in, V_in, norm_data,
                  sparsity_coefficients, fixed_modes, normalize):
     """
     One pass of updates for each factor in NMF
     Update the factors by solving a nonnegative least squares problem per mode.
-    
+
     Parameters
     ----------
     data: nonnegative array
@@ -295,64 +298,60 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data,
         The normalization is a l_2 normalization on each of the rank components
         (columnwise for U, linewise for V)
         Default: [False, False]
-    
 
     Returns
     -------
     U, V: numpy arrays
-        Factors of the NMF 
-    rec_error: 
+        Factors of the NMF
+    rec_error:
         The reconstruction error of this NMF step
     """
-    
+
     if len(sparsity_coefficients) != 2:
         raise ValueError("NMF needs 2 sparsity coefficients to be performed")
-    
+
     # Copy
     U = U_in.copy()
     V = V_in.copy()
 
     if 0 not in fixed_modes:
         # U update
-    
-        # Set timer for acceleration in HALSacc
+
+        # Set timer for acceleration in hals_nnls_acc
         tic = time.time()
-    
+
         # Computing cross products
         VVt = np.dot(V,np.transpose(V))
         VMt = np.dot(V,np.transpose(data))
-    
-        # End timer for acceleration in HALSacc
+
+        # End timer for acceleration in hals_nnls_acc
         timer = time.time() - tic
-    
-    
+
+        # Compute HALS/NNLS resolution
         U = np.transpose(nnls.hals_nnls_acc(VMt, VVt, np.transpose(U_in), maxiter=100, atime=timer, alpha=0.5, delta=0.01,
                                             sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False)[0])
 
     if 1 not in fixed_modes:
         # V update
-    
-        # Set timer for acceleration in HALSacc
+
+        # Set timer for acceleration in hals_nnls_acc
         tic = time.time()
-    
-        # Computing cross products 
+
+        # Computing cross products
         UtU = np.dot(np.transpose(U),U)
         UtM = np.dot(np.transpose(U),data)
-    
-        # End timer for acceleration in HALSacc
-        timer = time.time() - tic
-    
-        # Verify constraints type for choosing the least squares solver
-        V = nnls.hals_nnls_acc(UtM, UtU, V_in, maxiter=100, atime=timer, alpha=0.5, delta=0.01,
-                               sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False)[0]    
 
-        
+        # End timer for acceleration in hals_nnls_acc
+        timer = time.time() - tic
+
+        # Compute HALS/NNLS resolution
+        V = nnls.hals_nnls_acc(UtM, UtU, V_in, maxiter=100, atime=timer, alpha=0.5, delta=0.01,
+                               sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False)[0]
+
     sparsity_coefficients = np.where(np.array(sparsity_coefficients) == None, 0, sparsity_coefficients)
 
     rec_error = np.linalg.norm(data-np.dot(U,V), ord='fro') ** 2 + 2 * (sparsity_coefficients[0] * np.linalg.norm(U, ord=1) + sparsity_coefficients[1] * np.linalg.norm(V, ord=1))
 
     rec_error = rec_error/norm_data
 
-    # outputs
     return U, V, rec_error
-    

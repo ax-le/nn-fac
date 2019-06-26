@@ -8,7 +8,6 @@ Created on Fri Jun  7 16:40:44 2019
 import numpy as np
 import time
 
-# Accelerated version of algorithm resolving approximately the Nonnegative Least Square problem by computing a Hierarchical .
 def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01,
                   sparsity_coefficient = None, normalize = False, nonzero = False):
 ## Author : Axel Marmoret, based on Jeremy Cohen version's of Nicolas Gillis Matlab's code for HALS
@@ -17,41 +16,45 @@ def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01
     =================================
     Non Negative Least Squares (NNLS)
     =================================
-    
+
     Computes an approximate solution of a nonnegative least
     squares problem (NNLS) with an exact block-coordinate descent scheme.
     M is m by n, U is m by r, V is r by n.
     All matrices are nonnegative componentwise.
-      
+
     The NNLS unconstrained problem, as defined in [1], solve the following problem:
 
             min_{V >= 0} ||M-UV||_F^2
-    
+
     The matrix V is updated linewise.
-    
+
     The update rule of the k-th line of V (V[k,:]) for this resolution is:
+
             V[k,:]_(j+1) = V[k,:]_(j) + (UtM[k,:] - UtU[k,:] V_(j))/UtU[k,k]
-      
+
+    with j the update iteration.
+
     This problem can also be defined by adding a sparsity coefficient,
     enhancing sparsity in the solution [2]. The problem thus becomes:
-      
+
             min_{V >= 0} ||M-UV||_F^2 + 2*sparsity_coefficient*(\sum\limits_{j = 0}^{r}||V[k,:]||_1)
-    
+
     NB: 2*sp for uniformization in the derivative
-    
+
     In this sparse version, the update rule for V[k,:] becomes:
+
             V[k,:]_(j+1) = V[k,:]_(j) + (UtM[k,:] - UtU[k,:] V_(j) - sparsity_coefficient)/UtU[k,k]
-    
+
     This algorithm is defined in [1], as an accelerated version of the HALS algorithm.
 
     It features two accelerations: an early stop stopping criterion, and a
     complexity averaging between precomputations and loops, so as to use large
     precomputations several times.
-    
+
     This function is made for being used repetively inside an
     outer-loop alternating algorithm, for instance for computing nonnegative
     matrix Factorization or tensor factorization.
-    
+
     Parameters
     ----------
     UtM: r-by-n array
@@ -70,11 +73,12 @@ def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01
         Default: None
     alpha: Positive float
         Ratio between outer computations and inner loops, typically set to 0.5 or 1.
-        Default: 0..5
+        Default: 0.5
     delta : float in [0,1]
         early stop criterion, while err_k > delta*err_0. Set small for
         almost exact nnls solution, or larger (e.g. 1e-2) for inner loops
         of a PARAFAC computation.
+        Default: 0.01
     sparsity_coefficient: float or None
         The coefficient controling the sparisty level in the objective function.
         If set to None, the problem is solved unconstrained.
@@ -82,12 +86,12 @@ def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01
     normalize: boolean
         True in order to normalize each of the k-th line of V after the update
         False not to update them
-        Default: False        
+        Default: False
     nonzero: boolean
         True if the lines of the V matrix can't be zero,
         False if they can be zero
         Default: False
-    
+
     Returns
     -------
     V: array
@@ -98,13 +102,13 @@ def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01
         final number of update iteration performed
     rho: float
         number of loops authorized by the time stop criterion
-    
+
     References
     ----------
     [1]: N. Gillis and F. Glineur, Accelerated Multiplicative Updates and
     Hierarchical ALS Algorithms for Nonnegative Matrix Factorization,
     Neural Computation 24 (4): 1085-1105, 2012.
-    
+
     [2] J. Eggert, and E. Korner. "Sparse coding and NMF."
     2004 IEEE International Joint Conference on Neural Networks
     (IEEE Cat. No. 04CH37541). Vol. 4. IEEE, 2004.
@@ -114,7 +118,7 @@ def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01
     r, n = np.shape(UtM)
     if not in_V.size:  # checks if V is empty
         V = np.linalg.linalg.solve(UtU, UtM)  # Least squares
-    
+
         V[V < 0] = 0
         # Scaling
         scale = np.sum(UtM * V)/np.sum(
@@ -133,7 +137,7 @@ def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01
     while eps >= delta * eps0 and cnt <= 1+alpha*rho and cnt <= maxiter:
         nodelta = 0
         for k in range(r):
-            
+
             if UtU[k,k] != 0:
 
                 if sparsity_coefficient != None: # Using the sparsifying objective function
@@ -141,18 +145,18 @@ def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01
                     V[k,:] = V[k,:] + deltaV
 
                 else:
-                    deltaV = np.maximum((UtM[k,:]- UtU[k,:]@V) / UtU[k,k],-V[k,:]) # Element wise maximum -> good idea ?        
+                    deltaV = np.maximum((UtM[k,:]- UtU[k,:]@V) / UtU[k,k],-V[k,:]) # Element wise maximum -> good idea ?
                     V[k,:] = V[k,:] + deltaV
-                                            
+
                 nodelta = nodelta + np.dot(deltaV, np.transpose(deltaV))
-                
+
                 # Safety procedure, if columns aren't allow to be zero
                 if nonzero and (V[k,:] == 0).all() :
                     V[k,:] = 1e-16*np.max(V)
-                    
+
             elif nonzero:
                 raise ValueError("Column " + str(k) + " of U is zero with nonzero condition")
-            
+
             if normalize:
                 norm = np.linalg.norm(V[k,:])
                 if norm != 0:
@@ -160,55 +164,52 @@ def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01
                 else:
                     sqrt_n = 1/n ** (1/2)
                     V[k,:] = [sqrt_n for i in range(n)]
-        
+
         if cnt == 1:
             eps0 = nodelta
             # End timer for one iteration
             btime = max(time.time() - tic, 10e-7) # Avoid division by 0
-            
+
             if atime:  # atime is provided
                 # Number of loops authorized
                 rho = atime/btime
         eps = nodelta
         cnt += 1
-        
+
     return V, eps, cnt, rho
 
 
-
-
-
-# NNLS resolution while fitting another matrix
+# NNLS resolution while approaching another matrix
 def hals_coupling_nnls_acc(UtM, UtU, in_V, Vtarget, mu,
                            maxiter=500, atime=None, alpha=0.5, delta=0.01,
                            normalize = False, nonzero = False):
-    
+
     """
     ==========================================================
     Non Negative Least Squares (NNLS) with coupling constraint
     ==========================================================
-    
+
     Computes an approximate solution of a nonnegative least
     squares problem (NNLS) with an exact block-coordinate descent scheme.
     M is m by n, U is m by r, V is r by n.
     All matrices are nonnegative componentwise.
     The used NNLS resolution algorithm problem is defined in [1],
     and is an accelerated HALS algorithm.
-                
+
     It features two accelerations: an early stop stopping criterion, and a
     complexity averaging between precomputations and loops, so as to use large
     precomputations several times.
-    
+
     This function is made for being used repetively inside an
     outer-loop alternating algorithm, for instance for computing nonnegative
     matrix Factorization or tensor factorization.
-    
+
     Nonetheless, this version is adapted for coupling the returned matrix
     to a second matrix, called Vtarget.
     The optimization problem is defined for PARAFAC2 in [2] as below:
 
             min_{V >= 0} ||M-UV||_F^2 + mu * ||V - Vtarget||_F^2
-    
+
     Parameters
     ----------
     UtM: r-by-n array
@@ -231,20 +232,21 @@ def hals_coupling_nnls_acc(UtM, UtU, in_V, Vtarget, mu,
         Default: None
     alpha: Positive float
         Ratio between outer computations and inner loops, typically set to 0.5 or 1.
-        Default: 0..5
+        Default: 0.5
     delta : float in [0,1]
         early stop criterion, while err_k > delta*err_0. Set small for
         almost exact nnls solution, or larger (e.g. 1e-2) for inner loops
         of a PARAFAC computation.
+        Default: 0.01
     normalize: boolean
         True in order to normalize each of the k-th line of V after the update
         False not to update them
-        Default: False        
+        Default: False
     nonzero: boolean
         True if the lines of the V matrix can't be zero,
         False if they can be zero
         Default: False
-    
+
     Returns
     -------
     V: array
@@ -255,13 +257,13 @@ def hals_coupling_nnls_acc(UtM, UtU, in_V, Vtarget, mu,
         final number of update iteration performed
     rho: float
         number of loops authorized by the time stop criterion
-    
+
     References
     ----------
     [1]: N. Gillis and F. Glineur, Accelerated Multiplicative Updates and
     Hierarchical ALS Algorithms for Nonnegative Matrix Factorization,
     Neural Computation 24 (4): 1085-1105, 2012.
-    
+
     [2] J. E. Cohen and R. Bro, Nonnegative PARAFAC2: A Flexible Coupling Approach,
     DOI: 10.1007/978-3-319-93764-9_9
 
@@ -288,25 +290,25 @@ def hals_coupling_nnls_acc(UtM, UtU, in_V, Vtarget, mu,
     while cnt <= maxiter and eps >= delta * eps0 and cnt <= 1+alpha*rho:
         nodelta = 0
         for k in range(r):
-            
+
             if UtU[k,k] != 0:
                 # Update
                 deltaV = np.maximum((UtM[k,:]-UtU[k,:]@V + mu*(Vtarget[k,:] - V[k,:])) / (UtU[k,k] + mu),-V[k,:])
-                
+
                 V[k,:] = V[k,:] + deltaV
-                
+
                 # Direct update of V
                 #V[k,:] = np.maximum((UtM[k,:]-UtU[k,:]@V + UtU[k,k]*V[k,:] + mu*Vtarget[k,:]) / (UtU[k,k] + mu), 0)
-                
+
                 nodelta = nodelta + np.dot(deltaV, np.transpose(deltaV))
-                
+
                 if nonzero and (V[k,:] == 0).all() :
                     # Safety procedure if we don't want a column to be zero
                     V[k,:] = 1e-16*np.max(V)
-            
+
             elif nonzero:
                 raise ValueError("Column " + str(k) + " is zero with nonzero condition")
-                
+
             if normalize:
                 norm = np.linalg.norm(V[k,:])
                 if norm != 0:
@@ -314,12 +316,12 @@ def hals_coupling_nnls_acc(UtM, UtU, in_V, Vtarget, mu,
                 else:
                     sqrt_n = 1/n ** (1/2)
                     V[k,:] = [sqrt_n for i in range(n)]
-                
+
         if cnt == 1:
             eps0 = nodelta
             # End timer for one iteration
             btime = max(time.time() - tic, 10e-7) # Avoid division by 0
-            
+
             if atime:  # atime is provided
                 # Number of loops authorized
                 rho = atime/btime
@@ -328,15 +330,7 @@ def hals_coupling_nnls_acc(UtM, UtU, in_V, Vtarget, mu,
 
     return V, eps, cnt, rho
 
-
-
-
-
-
-
-
-
-# Accelerated version, using gross-tier stopping criterion
+# NNLS with sparseness and smoothness constraints
 def BETA_hals_sparse_smooth_nnls_acc(UtM, UtU, in_V, LtL_in, sp = 1e-7, sm = 1e-7,
                                      maxiter=500, atime=None, alpha=0.5, delta=0.01,
                                      normalize = False, nonzero = False):
@@ -347,29 +341,29 @@ def BETA_hals_sparse_smooth_nnls_acc(UtM, UtU, in_V, LtL_in, sp = 1e-7, sm = 1e-
     Non Negative Least Squares (NNLS)
     with sparsity and smoothness constraints
     ========================================
-    
+
     Computes an approximate solution of a nonnegative least
     squares problem (NNLS) with an exact block-coordinate descent scheme.
     M is m by n, U is m by r, V is r by n.
     All matrices are nonnegative componentwise.
     The used NNLS resolution algorithm problem is defined in [1],
     and is an accelerated HALS algorithm.
-                
+
     It features two accelerations: an early stop stopping criterion, and a
     complexity averaging between precomputations and loops, so as to use large
     precomputations several times.
-    
+
     This function is made for being used repetively inside an
     outer-loop alternating algorithm, for instance for computing nonnegative
     matrix Factorization or tensor factorization.
-    
+
     This algorithm add two constraints over the shape of V: sparsity and smoothness.
     The optimization problem is defined as below (see [2] for instance):
 
             min_{V >= 0} ||M-UV||_F^2 + 2*sp * (\sum\limits_{j = 0}^{r}||V[k,:]||_1) + sm* (\sum\limits_{j = 0}^{r} ||L V[k,:]||_2^2)
-            
+
     with L the smoothness matrix.
-    
+
     Parameters
     ----------
     UtM: r-by-n array
@@ -394,20 +388,21 @@ def BETA_hals_sparse_smooth_nnls_acc(UtM, UtU, in_V, LtL_in, sp = 1e-7, sm = 1e-
         Default: None
     alpha: Positive float
         Ratio between outer computations and inner loops, typically set to 0.5 or 1.
-        Default: 0..5
+        Default: 0.5
     delta : float in [0,1]
         early stop criterion, while err_k > delta*err_0. Set small for
         almost exact nnls solution, or larger (e.g. 1e-2) for inner loops
         of a PARAFAC computation.
+        Default: 0.01
     normalize: boolean
         True in order to normalize each of the k-th line of V after the update
         False not to update them
-        Default: False        
+        Default: False
     nonzero: boolean
         True if the lines of the V matrix can't be zero,
         False if they can be zero
         Default: False
-    
+
     Returns
     -------
     V: array
@@ -418,16 +413,16 @@ def BETA_hals_sparse_smooth_nnls_acc(UtM, UtU, in_V, LtL_in, sp = 1e-7, sm = 1e-
         final number of update iteration performed
     rho: float
         number of loops authorized by the time stop criterion
-    
+
     References
     ----------
     [1]: N. Gillis and F. Glineur, Accelerated Multiplicative Updates and
     Hierarchical ALS Algorithms for Nonnegative Matrix Factorization,
     Neural Computation 24 (4): 1085-1105, 2012.
-    
-    [2] Kimura, T., & Takahashi, N. (2017). Gauss-Seidel HALS Algorithm for 
+
+    [2] Kimura, T., & Takahashi, N. (2017). Gauss-Seidel HALS Algorithm for
     Nonnegative Matrix Factorization with Sparseness and Smoothness Constraints.
-    IEICE Transactions on Fundamentals of Electronics, 
+    IEICE Transactions on Fundamentals of Electronics,
     Communications and Computer Sciences, 100(12), 2925-2935.
 
     """
@@ -442,14 +437,14 @@ def BETA_hals_sparse_smooth_nnls_acc(UtM, UtU, in_V, LtL_in, sp = 1e-7, sm = 1e-
         V = np.dot(scale, V)
     else:
         V = in_V.copy()
-        
+
     LtL = LtL_in.copy()
-    
+
     invLtLUtU = []
-    
+
     for k in range(r):
         invLtLUtU.append(np.invert(UtU[k,k] * np.identity(LtL.shape[0]) + sm * LtL))
-    
+
     rho = 100000
     eps0 = 0
     cnt = 1
@@ -466,21 +461,21 @@ def BETA_hals_sparse_smooth_nnls_acc(UtM, UtU, in_V, LtL_in, sp = 1e-7, sm = 1e-
                 """left_member = UtU[k,k] * np.identity(LtL_in.shape[0]) + sm * LtL
                 right_member = UtM[k,:] - UtU[k,:]@V + UtU[k,k]@V[k,:] - sp * np.ones(UtM.shape[1]) - sm * np.transpose(LtL@np.transpose(V[k,:]))
                 V[k,:] = np.maximum(np.linalg.solve(left_member, right_member),0)"""
-                
+
                 modif = np.maximum(((UtM[k,:] - UtU[k,:]@V + UtU[k,k]@V[k,:] - sp * np.ones(UtM.shape[1]))@invLtLUtU[k]), 0)
-                
+
                 deltaV = modif - V[k,:]
 
                 V[k,:] = modif
 
                 nodelta = nodelta + np.dot(deltaV, np.transpose(deltaV))
-                
+
                 if nonzero and (V[k,:] == 0).all() :
                     # Safety procedure if we don't want a column to be zero
                     V[k,:] = 1e-16*np.max(V)
             elif nonzero:
                 raise ValueError("Column " + str(k) + " is zero with nonzero condition")
-            
+
             if normalize:
                 norm = np.linalg.norm(V[k,:])
                 if norm != 0:
@@ -493,7 +488,7 @@ def BETA_hals_sparse_smooth_nnls_acc(UtM, UtU, in_V, LtL_in, sp = 1e-7, sm = 1e-
             eps0 = nodelta
             # End timer for one iteration
             btime = max(time.time() - tic, 10e-7) # Avoid division by 0
-            
+
             if atime:  # atime is provided
                 # Number of loops authorized
                 rho = 1 + atime/btime #(btime + atime)/btime
@@ -516,7 +511,7 @@ def create_L(rank):
     return L
 
 
-# Different techniques for sparsity enhancement in NNLS
+# NNLS with several techniques for sparsity enhancement
 def BETA_hals_sparse_nnls_acc(UtM, UtU, in_V, sparsity, sparsity_coefficient, maxiter=500, atime=None, alpha=0.5, delta=0.01,
                               normalize = False, nonzero = False):
     ## Author : Axel Marmoret, based on Jeremy Cohen version of Nicolas Gillis Matlab' code for HALS
@@ -525,24 +520,24 @@ def BETA_hals_sparse_nnls_acc(UtM, UtU, in_V, sparsity, sparsity_coefficient, ma
     Computes an approximate solution of a nonnegative least
     squares problem (NNLS) with an exact block-coordinate descent scheme. M is m by n, U is m by r,
     and a sparsity coefficient.
-     
+
     If sparsity is set to "penalty", this algorithm solves:
 
                 min_{V >= 0} ||M-UV||_F^2 + 2*sparsity_coefficient*(\sum\limits_{j = 0}^{r}||V[k,:]||_1)
-               
+
                NB: 2*sp for uniformization in the derivative
-    
+
     else, if sparsity is set to "hard", this algorithm solves:
-               
+
                min_{V >= 0} ||M-UV||_F^2
-               
+
                and keeps only the {sparsity_coefficient} highest factors.
-               
+
                !! For that reason, {sparsity_coefficient} needs to be a nonzero integer here.
-               
+
                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
                If {sparsity_coefficient} is positive, it computes the sparsity on the lines of the V matrix,
-               
+
                else, it computes the sparsity on the rows of the V matrix
                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
@@ -583,15 +578,16 @@ def BETA_hals_sparse_nnls_acc(UtM, UtU, in_V, sparsity, sparsity_coefficient, ma
         Default: None
     alpha: Positive float
         Ratio between outer computations and inner loops, typically set to 0.5 or 1.
-        Default: 0..5
+        Default: 0.5
     delta : float in [0,1]
         early stop criterion, while err_k > delta*err_0. Set small for
         almost exact nnls solution, or larger (e.g. 1e-2) for inner loops
         of a PARAFAC computation.
+        Default: 0.01
     normalize: boolean
         True in order to normalize each of the k-th line of V after the update
         False not to update them
-        Default: False        
+        Default: False
     nonzero: boolean
         True if the lines of the V matrix can't be zero,
         False if they can be zero
@@ -613,7 +609,7 @@ def BETA_hals_sparse_nnls_acc(UtM, UtU, in_V, sparsity, sparsity_coefficient, ma
     [1] N. Gillis and F. Glineur, Accelerated Multiplicative Updates and
     Hierarchical ALS Algorithms for Nonnegative Matrix Factorization,
     Neural Computation 24 (4): 1085-1105, 2012.
-    
+
     [2] J. Eggert, and E. Korner. "Sparse coding and NMF."
     2004 IEEE International Joint Conference on Neural Networks
     (IEEE Cat. No. 04CH37541). Vol. 4. IEEE, 2004.
@@ -622,7 +618,7 @@ def BETA_hals_sparse_nnls_acc(UtM, UtU, in_V, sparsity, sparsity_coefficient, ma
     r, n = np.shape(UtM)
     if not in_V.size:  # checks if V is empty
         V = np.linalg.linalg.solve(UtU, UtM)  # Least squares
-    
+
         V[V < 0] = 0
         # Scaling
         scale = np.sum(UtM * V)/np.sum(
@@ -635,14 +631,14 @@ def BETA_hals_sparse_nnls_acc(UtM, UtU, in_V, sparsity, sparsity_coefficient, ma
     eps0 = 0
     cnt = 1
     eps = 1
-    
+
     nb_time_bins = 1
 
     if V[0,:].shape[0] != 1:
         nb_time_bins = V[0,:].shape[0]
     else:
         nb_time_bins = V[0,:].shape[1]
-        
+
     if sparsity == "hard" and not (type(sparsity_coefficient) == int): # Sparsifying the columns with the hard method
         raise ValueError("In the case of hard sparsity, the sparsity_coefficient needs to be an integer.")
 
@@ -651,44 +647,44 @@ def BETA_hals_sparse_nnls_acc(UtM, UtU, in_V, sparsity, sparsity_coefficient, ma
     while eps >= delta * eps0 and cnt <= 1+alpha*rho and cnt <= maxiter:
         nodelta = 0
         for k in range(r):
-            
+
             if UtU[k,k] != 0:
             # Update by penalty term
                 if sparsity == "penalty": # Modifying the objective function for sparsification
-                    
+
                     modif = np.true_divide(np.subtract(np.subtract(UtM[k,:], np.dot(UtU[k,:], V)), sparsity_coefficient), UtU[k,k])
                     deltaV = np.maximum(modif,-V[k,:]) # Element wise maximum -> good idea ?
-                    
+
                     V[k,:] = V[k,:] + deltaV
 
                 elif sparsity == "hard": # Sparsifying the rows with the hard method
-                    
+
                     # Classic update
                     deltaV = np.maximum((UtM[k,:]-np.dot(UtU[k,:], V)) / UtU[k,k],-V[k,:]) # Element wise maximum -> good idea ?
-        
+
                     V[k,:] = V[k,:] + deltaV
-                    
+
                     if sparsity_coefficient and sparsity_coefficient > 0:
                         V[k,:] = np.where(V[k,:] < np.percentile(V[k,:],(100-(sparsity_coefficient*100/nb_time_bins))), 0, V[k,:]) # Forcing saprsity by keeping only the {sparsity_coefficient} highest values
-                        
+
                 elif sparsity == "power":
                     # Classic update
                     deltaV = np.maximum((UtM[k,:]-np.dot(UtU[k,:], V)) / UtU[k,k],-V[k,:]) # Element wise maximum -> good idea ?
-        
+
                     V[k,:] = V[k,:] + deltaV
-                    
+
                     if sparsity_coefficient and sparsity_coefficient > 0:
                         V[k,:] = keep_most_powerful(V[k,:], sparsity_coefficient) #○ Keep only 95% of the power of the spectrogram
-                    
+
                 else:
                     raise ValueError(str(sparsity) + " is not a valid sparsity argument")
-                    
+
                 nodelta = nodelta + np.dot(deltaV, np.transpose(deltaV))
-                
+
                 # Safety procedure, if columns aren't allow to be zero
                 if nonzero and (V[k,:] == 0).all() :
                     V[k,:] = 1e-16*np.max(V)
-                
+
                 if normalize:
                     norm = np.linalg.norm(V[k,:])
                     if norm != 0:
@@ -696,15 +692,15 @@ def BETA_hals_sparse_nnls_acc(UtM, UtU, in_V, sparsity, sparsity_coefficient, ma
                     else:
                         sqrt_n = 1/n ** (1/2)
                         V[k,:] = [sqrt_n for i in range(n)]
-                    
+
             elif nonzero:
                 raise ValueError("Column " + str(k) + " is zero with nonzero condition")
-        
+
         # If we want to sparsify the columns and not the rows
         if sparsity == "hard" and (type(sparsity_coefficient) == int) and sparsity_coefficient < 0 and (-sparsity_coefficient) < r:
             for i in range(nb_time_bins):
                 V[:,i] = np.where(V[:,i] < np.percentile(V[:,i],(100+(sparsity_coefficient*100/r))), 0, V[:,i])
-        
+
         elif sparsity == "power" and (type(sparsity_coefficient) == int) and sparsity_coefficient < 0:
             for i in range(nb_time_bins):
                 V[:,i] = keep_most_powerful(V[:,i], -sparsity_coefficient) #○ Keep only {sparsity_coefficient}% of the power of the spectrogram
@@ -713,16 +709,18 @@ def BETA_hals_sparse_nnls_acc(UtM, UtU, in_V, sparsity, sparsity_coefficient, ma
             eps0 = nodelta
             # End timer for one iteration
             btime = max(time.time() - tic, 10e-7) # Avoid division by 0
-            
+
             if atime:  # atime is provided
                 # Number of loops authorized
                 rho = atime/btime
         eps = nodelta
         cnt += 1
-        
+
     return V, eps, cnt, rho
 
 def keep_most_powerful(data, percentage):
+    """ A function to keep only the most percentage% most powerful facotrs of data, in the sense of l2 norm """
+    #TODO: To fix: computing l1 norm
     somme = 0
     the_test = np.array(data.copy())
     norm_of_ref = np.linalg.norm(the_test, ord=1)
