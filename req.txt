@@ -1,0 +1,4 @@
+NMF:
+ - nimfa
+NTF:
+ - tensorly
