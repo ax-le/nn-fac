@@ -186,7 +186,9 @@ def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = Non
             D_list.append(np.diag(np.random.rand(rank)))
         D_list = np.array(D_list)
         if init_with_P:
-            P_list = [np.random.rand(r, rank) for i in range(nb_channel)]
+            zero_padded_identity = np.identity(r)
+            zero_padded_identity = zero_padded_identity[:,0:rank]
+            P_list = [zero_padded_identity for i in range(nb_channel)]
         else:
             W_star = np.random.rand(r, rank)
 
@@ -501,6 +503,7 @@ def one_step_parafac2(slices, rank, W_list_in, H_in, D_list_in, mu_list_in, norm
     """
     W_list = W_list_in.copy()
     D_list = D_list_in.copy()
+
     H = H_in.copy()
     mu_list = mu_list_in.copy()
     rec_error = 0
@@ -564,7 +567,7 @@ def one_step_parafac2(slices, rank, W_list_in, H_in, D_list_in, mu_list_in, norm
             timer = time.time() - tic
 
             # Keep only the diagonal coefficients
-            diag_D = np.diag(D_list[k])
+            diag_D = np.diagonal(D_list[k])
 
             # Reshape for having a proper column vector (error in nnls function otherwise)
             diag_D = np.reshape(diag_D, (diag_D.shape[0],1)) # It simply instead becomes a vector column instead of a list
@@ -572,8 +575,12 @@ def one_step_parafac2(slices, rank, W_list_in, H_in, D_list_in, mu_list_in, norm
             D_list[k] = nnls.hals_nnls_acc(UtM, UtU, diag_D, maxiter=100, atime=timer, alpha=0.5, delta=0.01,
                                           sparsity_coefficient = None, normalize = False, nonzero = False)[0] # All these parameters are not available for a diagonal matrix
 
-            # Make the matrix a diagonla one
-            D_list[k] = np.diag(np.diag((D_list[k])))
+            a, b = D_list[k].shape
+            if a == b:
+                # Make the matrix a diagonal one
+                D_list[k] = np.diag(np.diagonal((D_list[k])))
+            else:
+                D_list[k] = np.diag(D_list[k].flatten())
 
     if normalize[2]:
         for note_index in range(rank):
