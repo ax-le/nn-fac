@@ -720,13 +720,12 @@ def BETA_hals_sparse_nnls_acc(UtM, UtU, in_V, sparsity, sparsity_coefficient, ma
 
 def keep_most_powerful(data, percentage):
     """ A function to keep only the most percentage% most powerful facotrs of data, in the sense of l2 norm """
-    #TODO: To fix: computing l1 norm
     somme = 0
     the_test = np.array(data.copy())
-    norm_of_ref = np.linalg.norm(the_test, ord=1)
+    norm_of_ref = np.linalg.norm(the_test, ord=fro)**2
     current_max = 0
     while(somme < percentage * norm_of_ref / 100):
         current_max = np.amax(the_test)
-        somme += current_max
+        somme += current_max**2
         the_test = np.delete(the_test,np.argmax(the_test))
     return np.where(data < current_max, 0, data)
