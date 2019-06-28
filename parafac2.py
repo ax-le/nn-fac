@@ -11,9 +11,10 @@ import nnls
 import tensorly as tl
 from nimfa.methods import seeding
 
-def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = None, H = None, D_list_in = None, W_star = None, P_list = None, n_iter_max=100, tol=1e-6,
-              sparsity_coefficient = None, fixed_modes = [], normalize = [False, False, False, False, False],
-              verbose=False, return_errors=False):
+def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = None, H = None, D_list_in = None, W_star = None, P_list = None,
+    tol_mu = 1e6, step_mu = 1.02, n_iter_max=100, tol=1e-6,
+    sparsity_coefficient = None, fixed_modes = [], normalize = [False, False, False, False, False],
+    verbose=False, return_errors=False):
 
     """
     ========
@@ -93,6 +94,12 @@ def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = Non
     P_list: list or None
         A custom initialization for the P_k, used only in "custom" init mode  and if init_with_P is set to True.
         Default: None
+    tol_mu: float
+        Maximal value of mu
+        Default: 1e6
+    step_mu: float
+        The multiplicative constant which increases mu at each iteration
+        Default: 1.02
     n_iter_max: integer
         The maximal number of iteration before stopping the algorithm
         Default: 100
@@ -215,9 +222,10 @@ def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = Non
 
 
 # Author : Jeremy Cohen, modified by Axel Marmoret
-def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_P, W_star_in = None, P_list_in = None, n_iter_max=100, tol=1e-8,
-              sparsity_coefficient = None, fixed_modes = [], normalize = [False, False, False, False, False],
-              verbose=False, return_errors=False):
+def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_P, W_star_in = None, P_list_in = None,
+    tol_mu = 1e6, step_mu = 1.02, n_iter_max=100, tol=1e-8,
+    sparsity_coefficient = None, fixed_modes = [], normalize = [False, False, False, False, False],
+    verbose=False, return_errors=False):
 
     """
     Factorization of a third-order tensor T in nonnegative matrices,
@@ -256,6 +264,12 @@ def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_
         Initialization for the W^*, only used if init_with_P is set to False
     P_list_in: list or None
         Initialization for the P_k, only used if init_with_P is set to True
+    tol_mu: float
+        Maximal value of mu
+        Default: 1e6
+    step_mu: float
+        The multiplicative constant which increases mu at each iteration
+        Default: 1.02
     n_iter_max: integer
         The maximal number of iteration before stopping the algorithm
         Default: 100
@@ -349,10 +363,8 @@ def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_
 
         if iteration == 0:
             previous_rec_error = None
-            previous_couple_error = None
         else:
             previous_rec_error = rec_errors[-1]
-            previous_couple_error = couple_errors[-1]
 
         # Increase mu
         if iteration == 1:
@@ -363,7 +375,7 @@ def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_
             increasing_mu = True
 
         W_list, H, D_list, W_star, P_list, mu_list, rec_error, couple_error, increasing_mu = one_step_parafac2(tensor_slices, rank, W_list, H, D_list, mu_list, norm_slices,
-                                                                                                       previous_rec_error, previous_couple_error, increasing_mu = increasing_mu,
+                                                                                                       previous_rec_error, increasing_mu = increasing_mu,
                                                                                                        init_with_P = init_with_P, P_list_in = P_list, W_star_in = W_star,
                                                                                                        sparsity_coefficient = sparsity_coefficient, fixed_modes = fixed_modes, normalize = normalize)
 
@@ -412,7 +424,7 @@ def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_
         return W_list, np.array(H), D_list
 
 def one_step_parafac2(slices, rank, W_list_in, H_in, D_list_in, mu_list_in, norm_slices,
-                      previous_rec_error, previous_couple_error, increasing_mu = True,
+                      previous_rec_error, increasing_mu = True, tol_mu = 1e6, step_mu = 1.02,
                       init_with_P = True, W_star_in = None, P_list_in = None,
                       sparsity_coefficient = None, fixed_modes = [], normalize = [False, False, False, False, False]):
 
@@ -448,12 +460,16 @@ def one_step_parafac2(slices, rank, W_list_in, H_in, D_list_in, mu_list_in, norm
         in order not to compute them at each iteration
     previous_rec_error: float
         The reconstruction error at the last iteration
-    previous_couple_error: list
-        The list of the coupling errors at the last iteration
     increasing_mu: boolean
         Whether mu should be increased or not.
         Passed as variable to store that it is become "False"
         Default: True
+    tol_mu: float
+        Maximal value of mu
+        Default: 1e6
+    step_mu: float
+        The multiplicative constant which increases mu at each iteration
+        Default: 1.02
     init_with_P: boolean
         Define Whether the PARAFAC2 decomposition must be performed by initializing P_k or W^*:
             True: initialize with the P_k
@@ -527,7 +543,7 @@ def one_step_parafac2(slices, rank, W_list_in, H_in, D_list_in, mu_list_in, norm
 
             timer = time.time() - tic
 
-            W_list[k] = np.transpose(nnls.hals_nnls_fitting_acc(VMt, VVt, np.transpose(W_list[k]), np.transpose(P_list[k]@W_star), mu_list[k],
+            W_list[k] = np.transpose(nnls.hals_coupling_nnls_acc(VMt, VVt, np.transpose(W_list[k]), np.transpose(P_list[k]@W_star), mu_list[k],
                                                                 maxiter=100, atime=timer, alpha=0.5, delta=0.01,
                                                                 normalize = normalize[0], nonzero = False)[0])
 
@@ -588,9 +604,8 @@ def one_step_parafac2(slices, rank, W_list_in, H_in, D_list_in, mu_list_in, norm
 
     couple_error = []
 
-    #TODO : ajouter terme
-    #if sparsity_coefficient != None:
-    #    rec_error = sparsity_coefficient * np.linalg.norm()
+    if sparsity_coefficient != None:
+        rec_error = sparsity_coefficient * np.linalg.norm(H, ord=1)
 
     for k in range(nb_channel):
         couple_error.append(np.linalg.norm(W_list[k] - P_list[k]@W_star, ord='fro'))
@@ -598,10 +613,9 @@ def one_step_parafac2(slices, rank, W_list_in, H_in, D_list_in, mu_list_in, norm
         slice_rec_error = np.linalg.norm(slices[k]-W_list[k]@D_list[k]@H)** 2 + (mu_list[k] * couple_error[k]**2) / norm_slices[k]
         rec_error += slice_rec_error
 
-        #TODO: Abritrary tolerances, to be changed and passed as constants
-        if previous_rec_error != None and previous_couple_error != None:
-            if mu_list[k] < 1e6 and (previous_rec_error - rec_error) > 0 and (previous_couple_error[k] - slice_rec_error) > 1e-6 and increasing_mu:
-                mu_list[k] *= 1.02
+        if previous_rec_error != None:
+            if mu_list[k] < tol_mu and (previous_rec_error - rec_error) > 0 and increasing_mu:
+                mu_list[k] *= step_mu
             elif increasing_mu: # Stop increasing mu for the next iterations
                 increasing_mu = False
 
