@@ -112,11 +112,15 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
     -------
     >>> import numpy as np
     >>> import nmf
-    >>> M = np.array([[1,1], [2,2], [1,3], [4,1], [3.14, 42], [8,8], [4,2], [3,4]])
-    >>> rank = 30
-    >>> U, V = nmf.nmf(M, rank, init = "nndsvd",
-           sparsity_coefficients = [None, None], fixed_modes = [], normalize = [True, False],
-           verbose=False)
+    >>> rank = 5
+    >>> U_lines = 100
+    >>> V_col = 125
+    >>> U_0 = np.random.rand(U_lines, rank)
+    >>> V_0 = np.random.rand(rank, V_col)
+    >>> M = U_0@V_0
+    >>> U, V = nmf.nmf(M, rank, init = "random", n_iter_max = 500, tol = 1e-8,
+               sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
+               verbose=True, return_errors = False)
 
     References
     ----------

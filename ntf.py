@@ -112,11 +112,18 @@ def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
     -------
     >>> import numpy as np
     >>> import ntf
-    >>> T = ntf.tl.tensor(np.arange(24).reshape((3, 4, 2)))
-    >>> rank = 30
-    >>> factors = ntf.ntf(T, rank, init = "nndsvd",
-                          sparsity_coefficients = [None, None, None], fixed_modes = [], normalize = [True, True, False],
-                          verbose=False)
+    >>> rank = 6
+    >>> U_lines = 100
+    >>> V_lines = 125
+    >>> W_lines = 50
+    >>> factors_0 = []
+    >>> factors_0.append(np.random.rand(U_lines, rank))
+    >>> factors_0.append(np.random.rand(V_lines, rank))
+    >>> factors_0.append(np.random.rand(W_lines, rank))
+    >>> T = ntf.tl.kruskal_tensor.kruskal_to_tensor(factors_0)
+    >>> factors = ntf.ntf(T, rank, init = "random", n_iter_max = 500, tol = 1e-8,
+               sparsity_coefficients = [None, None, None], fixed_modes = [], normalize = [False, False, False],
+               verbose = True, return_errors = False)
 
     References
     ----------
