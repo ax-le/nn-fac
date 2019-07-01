@@ -541,6 +541,18 @@ def BETA_hals_sparse_nnls_acc(UtM, UtU, in_V, sparsity, sparsity_coefficient, ma
                else, it computes the sparsity on the rows of the V matrix
                !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
+    else, if sparsity is set to "power", this algorithm solves:
+
+              min_{V >= 0} ||M-UV||_F^2
+
+              and keeps only the highest factors such that ||V_sparse||_2 > {sparsity_coefficient}/100 * ||V||_2
+
+              !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+              If {sparsity_coefficient} is positive, it computes the sparsity on the lines of the V matrix,
+
+              else, it computes the sparsity on the rows of the V matrix
+              !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 
     This accelerated function, defined in [1], is made for being used repetively inside an
     outer-loop alternating algorithm, for instance for computing nonnegative
@@ -568,6 +580,9 @@ def BETA_hals_sparse_nnls_acc(UtM, UtU, in_V, sparsity, sparsity_coefficient, ma
        the sparsity coefficient, related to the kind of sparsity:
            if "penalty", it will be the coefficient in the objective function (see above)
            if "hard", it will be the number of coefficient to keep
+               on columns if > 0
+               on rows if < 0
+           if "power", it will be the thresholding percentage of the l2 norm (see above)
                on columns if > 0
                on rows if < 0
     maxiter: Postivie integer
@@ -719,7 +734,23 @@ def BETA_hals_sparse_nnls_acc(UtM, UtU, in_V, sparsity, sparsity_coefficient, ma
     return V, eps, cnt, rho
 
 def keep_most_powerful(data, percentage):
-    """ A function to keep only the most percentage% most powerful facotrs of data, in the sense of l2 norm """
+    """
+    A function to keep only the percentage% most powerful facotrs of data, in the sense of l2 norm,
+    which means that the returned data_sparse would be computed with the highest coefficients of data,
+    and stop when ||data_sparse||_2 >= percentage/100 * ||data||_2
+
+    Parameters
+    ----------
+    data: array
+        The data to sparsify
+    percentage: float
+        A float in the range [0, 100], percntage of l2 norm that will be kept
+
+    Returns
+    -------
+    data_sparse: array
+        Data sparsified with that technique
+    """
     somme = 0
     the_test = np.array(data.copy())
     norm_of_ref = np.linalg.norm(the_test, ord=fro)**2
