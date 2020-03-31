@@ -3,6 +3,8 @@ Python code for computing some Nonnegative Factorization, using an accelerated v
 
 This work has been done during my Research Master's (SIF, master.irisa.fr) internship in PANAMA team at IRISA/Inria Rennes, under the direction of BERTIN Nancy and COHEN Jeremy.
 
+It has been extended during my PhD in the same Team, under the direction of BERTIN Nancy and COHEN Jeremy and Frederic Bimbot.
+
 Contents
 --------
 ## NNLS
@@ -21,6 +23,11 @@ This factorization is computed as an ALS algorithm, described in [5], solved wit
 
 ## Nonnegative PARAFAC2
 Nonnegative Tensor Factorization admitting variability over a factor [7]. More precisely, this implemented version is based on a flexible coupling approach [8], where the coupling is enforced by a penalty term.
+
+## NTD - Nonnegative Tucker Decomposition
+Nonnegative Tucker Decomposition, which consists in factorizing a tensor T in factors (one per mode) and a core tensor, generally of smaller dimensions than T, which links linearly all factors [5]. This algorithm returns these factors and this core tensor.
+
+This factorization is computed as an ALS algorithm, described in [5], solved with NNLS, and using the toolbox Tensorly [6]. It also uses a gradient update rule for the core.
 
 References
 ----------
