@@ -10,22 +10,22 @@ Contents
 ## NNLS
 This toolbox contains a NNLS resolution algorithm, developed as described in [1]. This code is based on COHEN Jeremy python code adaptation of GILLIS Nicolas MatLab code.
 
-This toolbox also contains 4 factorization methods :
+This toolbox also contains 4 factorization methods:
 ## NMF
-Nonnegative Matrix Factorization [2] - Factorization of a nonnegative matrix $X$ in two nonnegative matrices $W$ and $H$, where $X \approx WH$.
+Nonnegative Matrix Factorization [2] - Factorization of a nonnegative matrix X in two nonnegative matrices W and H, where WH approach X.
 
-This is solved by minimizing the Frobenius norm between both matrices $X$ and $WH$ by NNLS: $||X - WH||_2$.
+This is solved by minimizing the Frobenius norm between both matrices X and WH by NNLS.
 
 ## NTF - Nonnegative PARAFAC
-Nonnegative Tensor Factorization, also called Nonnegative PARAFAC decomposition. PARAFAC decomposition consists in factorizing a tensor $T$ in a sum of rank-one tensors [3]. By concatenating the vectors along each mode of this sum, we obtain as much factors as the number of modes of the tensor [4]. This algorithm returns these factors.
+Nonnegative Tensor Factorization, also called Nonnegative PARAFAC decomposition. PARAFAC decomposition consists in factorizing a tensor T in a sum of rank-one tensors [3]. By concatenating the vectors along each mode of this sum, we obtain as much factors as the number of modes of the tensor [4]. This algorithm returns these factors.
 
-This factorization is computed as an ALS algorithm, described in [5], solved with NNLS, and using the toolbox Tensorly [6]. It returns the nonnegative factors of a nonnegative tensor $T$.
+This factorization is computed as an ALS algorithm, described in [5], solved with NNLS, and using the toolbox Tensorly [6]. It returns the nonnegative factors of a nonnegative tensor T.
 
 ## Nonnegative PARAFAC2
 Nonnegative Tensor Factorization admitting variability over a factor [7]. More precisely, this implemented version is based on a flexible coupling approach [8], where the coupling is enforced by a penalty term.
 
 ## NTD - Nonnegative Tucker Decomposition
-Nonnegative Tucker Decomposition, which consists in factorizing a tensor $T$ in factors (one per mode) and a core tensor, generally of smaller dimensions than $T$, which links linearly all factors [5]. This algorithm returns these factors and this core tensor.
+Nonnegative Tucker Decomposition, which consists in factorizing a tensor T in factors (one per mode) and a core tensor, generally of smaller dimensions than T, which links linearly all factors [5]. This algorithm returns these factors and this core tensor.
 
 This factorization is computed as an ALS algorithm, described in [5], solved with NNLS, and using the toolbox Tensorly [6]. It also uses a gradient update rule for the core.
 
