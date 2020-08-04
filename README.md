@@ -5,23 +5,39 @@ This work has been done during my Research Master's (SIF, master.irisa.fr) inter
 
 It has been extended during my PhD in the same Team, under the direction of BERTIN Nancy and COHEN Jeremy and BIMBOT Frederic.
 
-Contents
+## Installation
+
+You can install it using pip:
+
+    pip install nn-fac
+
+You can then use code by typing:
+
+    import nn_fac
+
+For example, if you want to use nmf, type:
+
+    import nn_fac.nmf
+
+Don't hesitate to reach the author in case of problem. Comments are welcomed!
+
+## Contents
 --------
-## NNLS
+### NNLS
 This toolbox contains a NNLS resolution algorithm, developed as described in [1]. This code is based on COHEN Jeremy python code adaptation of GILLIS Nicolas MatLab code.
 
 This toolbox also contains 4 factorization methods:
-## NMF
+### NMF
 Nonnegative Matrix Factorization [2] - Factorization of a nonnegative matrix X in two nonnegative matrices W and H, where WH approach X.
 
 This is solved by minimizing the Frobenius norm between both matrices X and WH by NNLS.
 
-## NTF - Nonnegative PARAFAC
+### NTF - Nonnegative PARAFAC
 Nonnegative Tensor Factorization, also called Nonnegative PARAFAC decomposition. PARAFAC decomposition consists in factorizing a tensor T in a sum of rank-one tensors [3]. By concatenating the vectors along each mode of this sum, we obtain as much factors as the number of modes of the tensor [4]. This algorithm returns these factors.
 
 This factorization is computed as an ALS algorithm, described in [5], solved with NNLS, and using the toolbox Tensorly [6]. It returns the nonnegative factors of a nonnegative tensor T.
 
-## Nonnegative PARAFAC2
+### Nonnegative PARAFAC2
 Nonnegative Tensor Factorization admitting variability over a factor [7]. More precisely, this implemented version is based on a flexible coupling approach [8], where the coupling is enforced by a penalty term.
 
 ## NTD - Nonnegative Tucker Decomposition

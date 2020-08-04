@@ -7,7 +7,7 @@ Created on Tue Jun 11 15:49:25 2019
 
 import numpy as np
 import time
-import nnls
+import nn_fac.nnls as nnls
 from nimfa.methods import seeding
 
 

@@ -8,11 +8,11 @@ Created on Tue Jun 11 16:52:21 2019
 import numpy as np
 import scipy
 import time
-import nnls
+import nn_fac.nnls as nnls
 import tensorly as tl
 from tensorly.decomposition import tucker as tl_tucker
 import math
-import errors as err
+import nn_fac.errors as err
 
 def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_max=100, tol=1e-6,
            sparsity_coefficients = [], fixed_modes = [], normalize = [], mode_core_norm = None, hals = False,
