@@ -6,3 +6,6 @@ NTF:
  PARAFAC2:
  - nimfa (methods.seeding specificly)
  - tensorly
+NTD:
+ - scipy
+ - tensorly
