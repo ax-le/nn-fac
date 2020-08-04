@@ -1,4 +1,4 @@
-# Nonnegative Factorization techniques
+# nn-fac: Nonnegative Factorization techniques toolbox
 Python code for computing some Nonnegative Factorization, using an accelerated version of Hierarchical Alternating Least Squares algorithm (HALS) with resolution of Nonnegative Least Squares problem (NNLS) [1].
 
 This work has been done during my Research Master's (SIF, master.irisa.fr) internship in PANAMA team at IRISA/Inria Rennes, under the direction of BERTIN Nancy and COHEN Jeremy.
