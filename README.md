@@ -22,7 +22,6 @@ For example, if you want to use nmf, type:
 Don't hesitate to reach the author in case of problem. Comments are welcomed!
 
 ## Contents
---------
 ### NNLS
 This toolbox contains a NNLS resolution algorithm, developed as described in [1]. This code is based on COHEN Jeremy python code adaptation of GILLIS Nicolas MatLab code.
 
@@ -40,13 +39,12 @@ This factorization is computed as an ALS algorithm, described in [5], solved wit
 ### Nonnegative PARAFAC2
 Nonnegative Tensor Factorization admitting variability over a factor [7]. More precisely, this implemented version is based on a flexible coupling approach [8], where the coupling is enforced by a penalty term.
 
-## NTD - Nonnegative Tucker Decomposition
+### NTD - Nonnegative Tucker Decomposition
 Nonnegative Tucker Decomposition, which consists in factorizing a tensor T in factors (one per mode) and a core tensor, generally of smaller dimensions than T, which links linearly all factors [5]. This algorithm returns these factors and this core tensor.
 
 This factorization is computed as an ALS algorithm, described in [5], solved with NNLS, and using the toolbox Tensorly [6]. It also uses a gradient update rule for the core.
 
-References
-----------
+## References
 [1] N. Gillis and F. Glineur, "Accelerated Multiplicative Updates and Hierarchical ALS Algorithms for Nonnegative Matrix Factorization," Neural Computation 24 (4): 1085-1105, 2012.
 
 [2] D. D. Lee and H. S. Seung, "Learning the parts of objects by non-negative matrix factorization," Nature, vol. 401, no. 6755, p. 788, 1999.
