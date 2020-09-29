@@ -14,7 +14,7 @@ from nimfa.methods import seeding
 def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = None, H = None, D_list_in = None, W_star = None, P_list = None,
     tol_mu = 1e6, step_mu = 1.02, n_iter_max=100, tol=1e-6,
     sparsity_coefficient = None, fixed_modes = [], normalize = [False, False, False, False, False],
-    verbose=False, return_errors=False):
+    verbose=False, return_costs=False):
 
     """
     ========
@@ -104,10 +104,10 @@ def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = Non
         The maximal number of iteration before stopping the algorithm
         Default: 100
     tol: float
-        Threshold on the improvement in reconstruction error.
-        Between two iterations, if the reconstruction error difference is
-        below this threshold, the algorithm stops.
-        Default: 1e-8
+        Threshold on the improvement in cost function value.
+        Between two succesive iterations, if the difference between 
+        both cost function values is below this threshold, the algorithm stops.
+        Default: 1e-6
     sparsity_coefficient: float
         The sparsity coefficient on H.
         If set to None, the algorithm is computed without sparsity
@@ -116,16 +116,16 @@ def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = Non
         Has to be set not to update a factor, 0 and 1 for U and V respectively
         Default: []
     normalize: array of boolean (5)
-        A boolean where the factors need to be normalized.
+        Indicates whether the factors need to be normalized or not.
         The normalization is a l_2 normalization on each of the rank components
         Default: [False, False, False, False, False]
     verbose: boolean
         Indicates whether the algorithm prints the successive
-        reconstruction errors or not
+        normalized cost function values or not
         Default: False
-    return_errors: boolean
-        Indicates whether the algorithm should return all reconstruction errors
-        and computation time of each iteration or not
+    return_costs: boolean
+        Indicates whether the algorithm should return all normalized cost function 
+        values and computation time of each iteration or not
         Default: False
 
     Returns
@@ -149,7 +149,7 @@ def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = Non
     >>> rank = 30
     >>> W_list, H, D_list = parafac2.parafac_2(T, rank, init_with_P = True, init = "nndsvd",
                                                sparsity_coefficient = None, fixed_modes = [], normalize = [True, False, True, True, True],
-                                               verbose=False)
+                                               verbose=True)
 
     References
     ----------
@@ -220,14 +220,14 @@ def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = Non
 
     return compute_parafac_2(tensor_slices, rank, W_list_in = W_list, H_0 = H, D_list_in = D_list, init_with_P = init_with_P, W_star_in = W_star, P_list_in = P_list, n_iter_max=n_iter_max, tol=tol,
               sparsity_coefficient = sparsity_coefficient, fixed_modes = fixed_modes, normalize = [False, False, False, False],
-              verbose=verbose, return_errors=return_errors)
+              verbose=verbose, return_costs=return_costs)
 
 
 # Author : Jeremy Cohen, modified by Axel Marmoret
 def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_P, W_star_in = None, P_list_in = None,
     tol_mu = 1e6, step_mu = 1.02, n_iter_max=100, tol=1e-8,
     sparsity_coefficient = None, fixed_modes = [], normalize = [False, False, False, False, False],
-    verbose=False, return_errors=False):
+    verbose=False, return_costs=False):
 
     """
     Factorization of a third-order tensor T in nonnegative matrices,
@@ -276,9 +276,9 @@ def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_
         The maximal number of iteration before stopping the algorithm
         Default: 100
     tol: float
-        Threshold on the improvement in reconstruction error.
-        Between two iterations, if the reconstruction error difference is
-        below this threshold, the algorithm stops.
+        Threshold on the improvement in cost function value.
+        Between two iterations, if the difference between 
+        both cost function values is below this threshold, the algorithm stops.
         Default: 1e-8
     sparsity_coefficient: float
         The sparsity coefficient on H.
@@ -293,11 +293,11 @@ def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_
         Default: [False, False, False, False, False]
     verbose: boolean
         Indicates whether the algorithm prints the successive
-        reconstruction errors or not
+        normalized cost function values or not
         Default: False
-    return_errors: boolean
-        Indicates whether the algorithm should return all reconstruction errors
-        and computation time of each iteration or not
+    return_costs: boolean
+        Indicates whether the algorithm should return all normalized cost function 
+        values and computation time of each iteration or not
         Default: False
 
     Returns
@@ -308,8 +308,8 @@ def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_
         Updated factor H
     D_list:
         List of the updated D_k
-    errors: list
-        A list of reconstruction errors at each iteration of the algorithm.
+    cost_fct_vals: list
+        A list of the normalized cost function values, for every iteration of the algorithm.
     toc: list
         A list with accumulated time at each iterations
 
@@ -344,7 +344,7 @@ def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_
         P_list = P_list_in.copy()
 
     # initialization - declare local varaibles
-    rec_errors = []
+    cost_fct_vals = []
     tic = time.time()
     toc = []
     norm_slices = []
@@ -364,9 +364,9 @@ def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_
     for iteration in range(n_iter_max):
 
         if iteration == 0:
-            previous_rec_error = None
+            previous_cost_fct_val = None
         else:
-            previous_rec_error = rec_errors[-1]
+            previous_cost_fct_val = cost_fct_vals[-1]
 
         # Increase mu
         if iteration == 1:
@@ -376,57 +376,53 @@ def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_
         if iteration == 2:
             increasing_mu = True
 
-        W_list, H, D_list, W_star, P_list, mu_list, rec_error, couple_error, increasing_mu = one_step_parafac2(tensor_slices, rank, W_list, H, D_list, mu_list, norm_slices,
-                                                                                                       previous_rec_error, increasing_mu = increasing_mu,
+        W_list, H, D_list, W_star, P_list, mu_list, cost, couple_error, increasing_mu = one_step_parafac2(tensor_slices, rank, W_list, H, D_list, mu_list, norm_slices,
+                                                                                                       previous_cost_fct_val, increasing_mu = increasing_mu,
                                                                                                        init_with_P = init_with_P, P_list_in = P_list, W_star_in = W_star,
                                                                                                        sparsity_coefficient = sparsity_coefficient, fixed_modes = fixed_modes, normalize = normalize)
 
         # Store the computation time
         toc.append(time.time() - tic)
 
-        rec_errors.append(rec_error)
+        cost_fct_vals.append(cost)
         couple_errors.append(couple_error)
 
         if verbose:
             if iteration == 0:
-                print('reconstruction error={}'.format(rec_errors[iteration]))
+                print('Normalized cost function value={}'.format(cost))
+            
                 for k in range(nb_channel):
-                    print('couple_error for channel {} = {}'.format(k, (couple_errors[iteration])[k]))
+                    print('Couple_error for channel {} = {}'.format(k, (couple_errors[iteration])[k]))
             else:
-                if rec_errors[-2] - rec_errors[-1] > 0:
-                    print('reconstruction error={}, variation={}.'.format(
-                            rec_errors[-1], rec_errors[-2] - rec_errors[-1]))
+                if cost_fct_vals[-2] - cost_fct_vals[-1] > 0:
+                    print('Normalized cost function value={}, variation={}.'.format(
+                            cost_fct_vals[-1], cost_fct_vals[-2] - cost_fct_vals[-1]))
                 else:
-                    if rec_errors[-2] - rec_errors[-1] > 0:
-                        print('reconstruction error={}, variation={}.'.format(
-                                rec_errors[-1], rec_errors[-2] - rec_errors[-1]))
-                    else:
-                        print('\033[91m' + 'reconstruction error={}, variation={}.'.format(
-                                rec_errors[-1], rec_errors[-2] - rec_errors[-1]) + '\033[0m')
+                    # print in red when the reconstruction error is negative (shouldn't happen)
+                    print('\033[91m' + 'Normalized cost function value={}, variation={}.'.format(
+                            cost_fct_vals[-1], cost_fct_vals[-2] - cost_fct_vals[-1]) + '\033[0m')
 
                 for k in range(nb_channel):
                     if (couple_errors[-2])[k] - (couple_errors[-1])[k] > 0:
-                        print('couple_error for channel {} = {}, variation={}.'.format(k, (couple_errors[-1])[k],
+                        print('Couple_error for channel {} = {}, variation={}.'.format(k, (couple_errors[-1])[k],
                           (couple_errors[-2])[k] - (couple_errors[-1])[k]))
                     else:
-                        print('\033[91m' + 'couple_error for channel {} = {}, variation={}.'.format(k, (couple_errors[-1])[k],
+                        print('\033[91m' + 'Couple_error for channel {} = {}, variation={}.'.format(k, (couple_errors[-1])[k],
                           (couple_errors[-2])[k] - (couple_errors[-1])[k]) + '\033[0m')
 
-
-        if iteration > 0 and abs(rec_errors[-2] - rec_errors[-1]) < tol:
+        if iteration > 0 and abs(cost_fct_vals[-2] - cost_fct_vals[-1]) < tol:
             # Stop condition: relative error between last two iterations < tol
             if verbose:
-                print('converged in {} iterations.'.format(iteration))
+                print('Converged in {} iterations.'.format(iteration))
             break
 
-
-    if return_errors:
-        return W_list, np.array(H), D_list, rec_errors, toc
+    if return_costs:
+        return W_list, np.array(H), D_list, cost_fct_vals, toc
     else:
         return W_list, np.array(H), D_list
 
 def one_step_parafac2(slices, rank, W_list_in, H_in, D_list_in, mu_list_in, norm_slices,
-                      previous_rec_error, increasing_mu = True, tol_mu = 1e6, step_mu = 1.02,
+                      previous_cost_fct_val, increasing_mu = True, tol_mu = 1e6, step_mu = 1.02,
                       init_with_P = True, W_star_in = None, P_list_in = None,
                       sparsity_coefficient = None, fixed_modes = [], normalize = [False, False, False, False, False]):
 
@@ -496,17 +492,16 @@ def one_step_parafac2(slices, rank, W_list_in, H_in, D_list_in, mu_list_in, norm
     -------
     W_list, D_list, H, W_star, mu_list:
         The updated factors
-    rec_error : float
-        residual error after the ALS steps.
-
-
+    cost_fct_val:
+        The value of the cost function at this step,
+        normalized by the squared norm of the original tensor.
     """
     W_list = W_list_in.copy()
     D_list = D_list_in.copy()
 
     H = H_in.copy()
     mu_list = mu_list_in.copy()
-    rec_error = 0
+    cost_fct_val = 0
     nb_channel = len(W_list)
 
     # Tous les append doivent etre reinit ici
@@ -612,21 +607,21 @@ def one_step_parafac2(slices, rank, W_list_in, H_in, D_list_in, mu_list_in, norm
     couple_error = []
 
     if sparsity_coefficient != None:
-        rec_error = sparsity_coefficient * np.linalg.norm(H, ord=1)
+        cost_fct_val = sparsity_coefficient * np.linalg.norm(H, ord=1)
 
     for k in range(nb_channel):
         couple_error.append(np.linalg.norm(W_list[k] - P_list[k]@W_star, ord='fro'))
 
         slice_rec_error = np.linalg.norm(slices[k]-W_list[k]@D_list[k]@H)** 2 + (mu_list[k] * couple_error[k]**2) / norm_slices[k]
-        rec_error += slice_rec_error
+        cost_fct_val += slice_rec_error
 
-        if previous_rec_error != None:
-            if mu_list[k] < tol_mu and (previous_rec_error - rec_error) > 0 and increasing_mu:
+        if previous_cost_fct_val != None:
+            if mu_list[k] < tol_mu and (previous_cost_fct_val - cost_fct_val) > 0 and increasing_mu:
                 mu_list[k] *= step_mu
             elif increasing_mu: # Stop increasing mu for the next iterations
                 increasing_mu = False
 
-    return W_list, H, D_list, W_star, P_list, mu_list, rec_error, couple_error, increasing_mu
+    return W_list, H, D_list, W_star, P_list, mu_list, cost_fct_val, couple_error, increasing_mu
 
 
 def compute_P_k(W_list, W_star, nb_channel):

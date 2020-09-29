@@ -16,7 +16,7 @@ import nn_fac.errors as err
 
 def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_max=100, tol=1e-6,
            sparsity_coefficients = [], fixed_modes = [], normalize = [], mode_core_norm = None, hals = False,
-           verbose=False, return_errors=False, deterministic=False):
+           verbose=False, return_costs=False, deterministic=False):
 
     """
     ======================================
@@ -81,10 +81,10 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
         The maximal number of iteration before stopping the algorithm
         Default: 100
     tol: float
-        Threshold on the improvement in reconstruction error.
-        Between two iterations, if the reconstruction error difference is
-        below this threshold, the algorithm stops.
-        Default: 1e-8
+        Threshold on the improvement in cost function value.
+        Between two succesive iterations, if the difference between 
+        both cost function values is below this threshold, the algorithm stops.
+        Default: 1e-6
     sparsity_coefficients: list of float (as much as the number of modes + 1 for the core)
         The sparsity coefficients on each factor and on the core respectively.
         If set to None or [], the algorithm is computed without sparsity
@@ -93,7 +93,7 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
         Has to be set not to update a factor, taken in the order of modes and lastly on the core.
         Default: []
     normalize: list of boolean (as much as the number of modes + 1 for the core)
-        A boolean whereas the factors need to be normalized.
+        Indicates whether the factors need to be normalized or not.
         The normalization is a l_2 normalization on each of the rank components
         (For the factors, each column will be normalized, ie each atom of the dimension of the current rank).
         Default: []
@@ -106,11 +106,12 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
         Whether to run hals (true) or gradient (false) update on the core.
         Default (and recommanded): false
     verbose: boolean
-        Indicates whether the algorithm prints the successive reconstruction errors or not.
+        Indicates whether the algorithm prints the successive
+        normalized cost function values or not
         Default: False
-    return_errors: boolean
-        Indicates whether the algorithm should return all reconstruction errors
-        and computation time of each iteration or not.
+    return_costs: boolean
+        Indicates whether the algorithm should return all normalized cost function 
+        values and computation time of each iteration or not
         Default: False
     deterministic:
         Runs the algorithm as a deterministic way, by fixing seed in all possible randomisation,
@@ -123,8 +124,8 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
         The core tensor linking the factors of the decomposition
     factors: numpy #TODO: For tensorly pulling, replace numpy by backend
         An array containing all the factors computed with the NTD
-    errors: list, only if return_errors == True
-        A list of reconstruction errors at each iteration of the algorithm.
+    cost_fct_vals: list
+        A list of the normalized cost function values, for every iteration of the algorithm.
     toc: list, only if return_errors == True
         A list with accumulated time at each iterations
 
@@ -219,11 +220,11 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
     return compute_ntd(tensor, ranks, core, factors, n_iter_max=n_iter_max, tol=tol,
                        sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, 
                        normalize = normalize, mode_core_norm = mode_core_norm,
-                       verbose=verbose, return_errors=return_errors, hals = hals, deterministic = deterministic)
+                       verbose=verbose, return_costs=return_costs, hals = hals, deterministic = deterministic)
 
 def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
            sparsity_coefficients = [], fixed_modes = [], normalize = [], hals = False,mode_core_norm=None,
-           verbose=False, return_errors=False, deterministic=False):
+           verbose=False, return_costs=False, deterministic=False):
 
     """
     Computation of a Nonnegative Tucker Decomposition [1]
@@ -248,9 +249,9 @@ def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
         The maximal number of iteration before stopping the algorithm
         Default: 100
     tol: float
-        Threshold on the improvement in reconstruction error.
-        Between two iterations, if the reconstruction error difference is
-        below this threshold, the algorithm stops.
+        Threshold on the improvement in cost function value.
+        Between two iterations, if the difference between 
+        both cost function values is below this threshold, the algorithm stops.
         Default: 1e-8
     sparsity_coefficients: list of float (as much as the number of modes + 1 for the core)
         The sparsity coefficients on each factor and on the core respectively.
@@ -260,7 +261,7 @@ def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
         Has to be set not to update a factor, taken in the order of modes and lastly on the core.
         Default: []
     normalize: list of boolean (as much as the number of modes + 1 for the core)
-        A boolean whereas the factors need to be normalized.
+        Indicates whether the factors need to be normalized or not.
         The normalization is a l_2 normalization on each of the rank components
         (For the factors, each column will be normalized, ie each atom of the dimension of the current rank).
         Default: []
@@ -273,11 +274,12 @@ def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
         Whether to run hals (true) or gradient (false) update on the core.
         Default (and recommanded): false
     verbose: boolean
-        Indicates whether the algorithm prints the successive reconstruction errors or not.
+        Indicates whether the algorithm prints the successive
+        normalized cost function values or not
         Default: False
-    return_errors: boolean
-        Indicates whether the algorithm should return all reconstruction errors
-        and computation time of each iteration or not.
+    return_costs: boolean
+        Indicates whether the algorithm should return all normalized cost function 
+        values and computation time of each iteration or not
         Default: False
     deterministic:
         Runs the algorithm as a deterministic way, by fixing seed in all possible randomisation.
@@ -289,8 +291,8 @@ def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
         The core tensor linking the factors of the decomposition
     factors: numpy #TODO: For tensorly pulling, replace numpy by backend
         An array containing all the factors computed with the NTD
-    errors: list, only if return_errors == True
-        A list of reconstruction errors at each iteration of the algorithm.
+    cost_fct_vals: list
+        A list of the normalized cost function values, for every iteration of the algorithm.
     toc: list, only if return_errors == True
         A list with accumulated time at each iterations
 
@@ -335,7 +337,7 @@ def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
         print("The core was asked NOT to be normalized, but mode_core_norm was set to a valid norm. Is this a mistake?")
     
     # initialisation - declare local varaibles
-    rec_errors = []
+    cost_fct_vals = []
     tic = time.time()
     toc = []
 
@@ -348,37 +350,37 @@ def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
     for iteration in range(n_iter_max):
         # One pass of least squares on each updated mode
         if deterministic:
-            core, factors, rec_error = one_ntd_step(tensor, ranks, core, factors, norm_tensor,
+            core, factors, cost = one_ntd_step(tensor, ranks, core, factors, norm_tensor,
                                           sparsity_coefficients, fixed_modes, normalize, mode_core_norm, hals = hals, alpha = math.inf)
         else:
-            core, factors, rec_error = one_ntd_step(tensor, ranks, core, factors, norm_tensor,
+            core, factors, cost = one_ntd_step(tensor, ranks, core, factors, norm_tensor,
                                           sparsity_coefficients, fixed_modes, normalize, mode_core_norm, hals = hals)
 
         # Store the computation time
         toc.append(time.time() - tic)
 
-        rec_errors.append(rec_error)
+        cost_fct_vals.append(cost)
 
         if verbose:
             if iteration == 0:
-                print('reconstruction error={}'.format(rec_errors[iteration]))
+                print('Normalized cost function value={}'.format(cost))
             else:
-                if rec_errors[-2] - rec_errors[-1] > 0:
-                    print('reconstruction error={}, variation={}.'.format(
-                            rec_errors[-1], rec_errors[-2] - rec_errors[-1]))
+                if cost_fct_vals[-2] - cost_fct_vals[-1] > 0:
+                    print('Normalized cost function value={}, variation={}.'.format(
+                            cost_fct_vals[-1], cost_fct_vals[-2] - cost_fct_vals[-1]))
                 else:
-                    print('\033[91m' + 'reconstruction error={}, variation={}.'.format(
-                            rec_errors[-1], rec_errors[-2] - rec_errors[-1]) + '\033[0m')
+                    # print in red when the reconstruction error is negative (shouldn't happen)
+                    print('\033[91m' + 'Normalized cost function value={}, variation={}.'.format(
+                            cost_fct_vals[-1], cost_fct_vals[-2] - cost_fct_vals[-1]) + '\033[0m')
 
-        if iteration > 0 and abs(rec_errors[-2] - rec_errors[-1]) < tol:
+        if iteration > 0 and abs(cost_fct_vals[-2] - cost_fct_vals[-1]) < tol:
             # Stop condition: relative error between last two iterations < tol
             if verbose:
-                print('converged in {} iterations.'.format(iteration))
+                print('Converged in {} iterations.'.format(iteration))
             break
 
-
-    if return_errors:
-        return core, factors, rec_errors, toc
+    if return_costs:
+        return core, factors, cost_fct_vals, toc
     else:
         return core, factors
 
@@ -448,9 +450,10 @@ def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
         The core tensor linking the factors of the decomposition
     factors: list of factors
         An array containing all the factors computed with the NTD
-    error: float
-        The reconstruction error after this update.
-
+    cost_fct_val:
+        The value of the cost function at this step,
+        normalized by the squared norm of the original tensor.
+    
     References
     ----------
     [1] Tamara G Kolda and Brett W Bader. "Tensor decompositions and applications",
@@ -595,9 +598,9 @@ def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
                 raise NotImplementedError("TODEBUG: Too many sparsity coefficients, should have been raised before.")
 
     rec_error = norm_tensor ** 2 - 2*tl.tenalg.inner(all_MtX, core) + tl.tenalg.inner(tl.tenalg.multi_mode_dot(core, all_MtM, transpose = False), core)
-    rec_error = (rec_error ** (1/2) + sparsity_error) / norm_tensor
+    cost_fct_val = (rec_error + sparsity_error) / (norm_tensor ** 2)
 
     #exhaustive_rec_error = (tl.norm(tensor - tl.tenalg.multi_mode_dot(core, factors, transpose = False), 2) + sparsity_error) / norm_tensor
     #print("diff: " + str(rec_error - exhaustive_rec_error))
     #print("max" + str(np.amax(factors[2])))
-    return core, factors, rec_error #  exhaustive_rec_error
+    return core, factors, cost_fct_val #  exhaustive_rec_error

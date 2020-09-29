@@ -13,8 +13,7 @@ from nimfa.methods import seeding
 
 def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol=1e-8,
            sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
-           verbose=False, return_errors=False):
-
+           verbose=False, return_costs=False):
     """
     ======================================
     Nonnegative Matrix Factorization (NMF)
@@ -22,7 +21,7 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
 
     Factorization of a matrix M in two nonnegative matrices U and V,
     such that the product UV approximates M.
-    If M is of size m*n, U and V are resepctively of size m*r and r*n,
+    If M is of size m*n, U and V are respectively of size m*r and r*n,
     r being the rank of the decomposition (parameter)
     Typically, this method is used as a dimensionality reduction technique,
     or for source separation.
@@ -74,9 +73,9 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
         The maximal number of iteration before stopping the algorithm
         Default: 100
     tol: float
-        Threshold on the improvement in reconstruction error.
-        Between two iterations, if the reconstruction error difference is
-        below this threshold, the algorithm stops.
+        Threshold on the improvement in cost function value.
+        Between two succesive iterations, if the difference between 
+        both cost function values is below this threshold, the algorithm stops.
         Default: 1e-8
     sparsity_coefficients: List of float (two)
         The sparsity coefficients on U and V respectively.
@@ -86,32 +85,32 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
         Has to be set not to update a factor, 0 and 1 for U and V respectively
         Default: []
     normalize: List of boolean (two)
-        A boolean whereas the factors need to be normalized.
+        Indicates whether the factors need to be normalized or not.
         The normalization is a l_2 normalization on each of the rank components
         (columnwise for U, linewise for V)
         Default: [False, False]
     verbose: boolean
         Indicates whether the algorithm prints the successive
-        reconstruction errors or not
+        normalized cost function values or not
         Default: False
-    return_errors: boolean
-        Indicates whether the algorithm should return all reconstruction errors
-        and computation time of each iteration or not
+    return_costs: boolean
+        Indicates whether the algorithm should return all normalized cost function 
+        values and computation time of each iteration or not
         Default: False
 
     Returns
     -------
     U, V: numpy arrays
         Factors of the NMF
-    errors: list
-        A list of reconstruction errors at each iteration of the algorithm.
+    cost_fct_vals: list
+        A list of the normalized cost function values, for every iteration of the algorithm.
     toc: list
-        A list with accumulated time at each iterations
+        A list with accumulated time for every iterations
 
     Example
     -------
     >>> import numpy as np
-    >>> import nmf
+    >>> from nn_fac import nmf
     >>> rank = 5
     >>> U_lines = 100
     >>> V_col = 125
@@ -120,7 +119,7 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
     >>> M = U_0@V_0
     >>> U, V = nmf.nmf(M, rank, init = "random", n_iter_max = 500, tol = 1e-8,
                sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
-               verbose=True, return_errors = False)
+               verbose=True, return_costs = False)
 
     References
     ----------
@@ -136,7 +135,6 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
     factorization", Journal of Machine Learning Research 13.Mar (2012),
     pp. 849{853.
     """
-
     if init.lower() == "random":
         k, n = data.shape
         U_0 = np.random.rand(k, rank)
@@ -154,15 +152,12 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
 
     return compute_nmf(data, rank, U_0, V_0, n_iter_max=n_iter_max, tol=tol,
                    sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, normalize = normalize,
-                   verbose=verbose, return_errors=return_errors)
-
-
-
+                   verbose=verbose, return_costs=return_costs)
 
 # Author : Jeremy Cohen, modified by Axel Marmoret
 def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
            sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
-           verbose=False, return_errors=False):
+           verbose=False, return_costs=False):
     """
     Computation of a Nonnegative matrix factorization via
     hierarchical alternating least squares (HALS) [1],
@@ -182,9 +177,9 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
         The maximal number of iteration before stopping the algorithm
         Default: 100
     tol: float
-        Threshold on the improvement in reconstruction error.
-        Between two iterations, if the reconstruction error difference is
-        below this threshold, the algorithm stops.
+        Threshold on the improvement in cost function value.
+        Between two iterations, if the difference between 
+        both cost function values is below this threshold, the algorithm stops.
         Default: 1e-8
     sparsity_coefficients: List of float (two)
         The sparsity coefficients on U and V respectively.
@@ -194,25 +189,25 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
         Has to be set not to update a factor, 0 and 1 for U and V respectively
         Default: []
     normalize: List of boolean (two)
-        A boolean whereas the factors need to be normalized.
+        Indicates whether the factors need to be normalized or not.
         The normalization is a l_2 normalization on each of the rank components
         (columnwise for U, linewise for V)
         Default: [False, False]
     verbose: boolean
         Indicates whether the algorithm prints the successive
-        reconstruction errors or not
+        normalized cost function values or not
         Default: False
-    return_errors: boolean
-        Indicates whether the algorithm should return all reconstruction errors
-        and computation time of each iteration or not
+    return_costs: boolean
+        Indicates whether the algorithm should return all normalized cost function 
+        values and computation time of each iteration or not
         Default: False
 
     Returns
     -------
     U, V: numpy arrays
         Factors of the NMF
-    errors: list
-        A list of reconstruction errors at each iteration of the algorithm.
+    cost_fct_vals: list
+        A list of the normalized cost function values, for every iteration of the algorithm.
     toc: list
         A list with accumulated time at each iterations
 
@@ -222,11 +217,10 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
     Hierarchical ALS Algorithms for Nonnegative Matrix Factorization,
     Neural Computation 24 (4): 1085-1105, 2012.
     """
-
     # initialisation
     U = U_in.copy()
     V = V_in.copy()
-    rec_errors = []
+    cost_fct_vals = []
     norm_data = np.linalg.norm(data)
     tic = time.time()
     toc = []
@@ -241,33 +235,33 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
     for iteration in range(n_iter_max):
 
         # One pass of least squares on each updated mode
-        U, V, rec_error = one_nmf_step(data, rank, U, V, norm_data,
+        U, V, cost = one_nmf_step(data, rank, U, V, norm_data,
                                        sparsity_coefficients, fixed_modes, normalize)
 
         toc.append(time.time() - tic)
-        if tol:
-            rec_errors.append(rec_error)
 
-            if verbose:
-                if iteration == 0:
-                    print('reconstruction error={}'.format(rec_errors[iteration]))
+        cost_fct_vals.append(cost)
+
+        if verbose:
+            if iteration == 0:
+                print('Normalized cost function value={}'.format(cost))
+            else:
+                if cost_fct_vals[-2] - cost_fct_vals[-1] > 0:
+                    print('Normalized cost function value={}, variation={}.'.format(
+                            cost_fct_vals[-1], cost_fct_vals[-2] - cost_fct_vals[-1]))
                 else:
-                    if rec_errors[-2] - rec_errors[-1] > 0:
-                        print('reconstruction error={}, variation={}.'.format(
-                                rec_errors[-1], rec_errors[-2] - rec_errors[-1]))
-                    else:
-                        # print in red when the reconstruction error is negative (shouldn't happen)
-                        print('\033[91m' + 'reconstruction error={}, variation={}.'.format(
-                                rec_errors[-1], rec_errors[-2] - rec_errors[-1]) + '\033[0m')
+                    # print in red when the reconstruction error is negative (shouldn't happen)
+                    print('\033[91m' + 'Normalized cost function value={}, variation={}.'.format(
+                            cost_fct_vals[-1], cost_fct_vals[-2] - cost_fct_vals[-1]) + '\033[0m')
 
-            if iteration > 0 and abs(rec_errors[-2] - rec_errors[-1]) < tol:
-                # Stop condition: relative error between last two iterations < tol
-                if verbose:
-                    print('converged in {} iterations.'.format(iteration))
-                break
+        if iteration > 0 and abs(cost_fct_vals[-2] - cost_fct_vals[-1]) < tol:
+            # Stop condition: relative error between last two iterations < tol
+            if verbose:
+                print('Converged in {} iterations.'.format(iteration))
+            break
 
-    if return_errors:
-        return np.array(U), np.array(V), rec_errors, toc
+    if return_costs:
+        return np.array(U), np.array(V), cost_fct_vals, toc
     else:
         return np.array(U), np.array(V)
 
@@ -307,8 +301,9 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data,
     -------
     U, V: numpy arrays
         Factors of the NMF
-    rec_error:
-        The reconstruction error of this NMF step
+    cost_fct_val:
+        The value of the cost function at this step,
+        normalized by the squared norm of the original matrix.
     """
 
     if len(sparsity_coefficients) != 2:
@@ -354,8 +349,8 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data,
 
     sparsity_coefficients = np.where(np.array(sparsity_coefficients) == None, 0, sparsity_coefficients)
 
-    rec_error = np.linalg.norm(data-np.dot(U,V), ord='fro') ** 2 + 2 * (sparsity_coefficients[0] * np.linalg.norm(U, ord=1) + sparsity_coefficients[1] * np.linalg.norm(V, ord=1))
+    cost = np.linalg.norm(data-np.dot(U,V), ord='fro') ** 2 + 2 * (sparsity_coefficients[0] * np.linalg.norm(U, ord=1) + sparsity_coefficients[1] * np.linalg.norm(V, ord=1))
 
-    rec_error = rec_error/norm_data
+    cost = cost/(norm_data**2)
 
-    return U, V, rec_error
+    return U, V, cost

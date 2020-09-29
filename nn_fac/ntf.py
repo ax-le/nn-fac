@@ -13,7 +13,7 @@ from nimfa.methods import seeding
 
 def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
            sparsity_coefficients = [], fixed_modes = [], normalize = [],
-           verbose=False, return_errors=False):
+           verbose=False, return_costs=False):
 
     """
     ======================================
@@ -74,9 +74,9 @@ def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
         The maximal number of iteration before stopping the algorithm
         Default: 100
     tol: float
-        Threshold on the improvement in reconstruction error.
-        Between two iterations, if the reconstruction error difference is
-        below this threshold, the algorithm stops.
+        Threshold on the improvement in cost function value.
+        Between two succesive iterations, if the difference between 
+        both cost function values is below this threshold, the algorithm stops.
         Default: 1e-8
     sparsity_coefficients: array of float (as much as the number of modes)
         The sparsity coefficients on U and V respectively.
@@ -92,19 +92,19 @@ def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
         Default: []
     verbose: boolean
         Indicates whether the algorithm prints the successive
-        reconstruction errors or not
+        normalized cost function values or not
         Default: False
-    return_errors: boolean
-        Indicates whether the algorithm should return all reconstruction errors
-        and computation time of each iteration or not
+    return_costs: boolean
+        Indicates whether the algorithm should return all normalized cost function 
+        values and computation time of each iteration or not
         Default: False
 
     Returns
     -------
     np.array(factors): numpy array
         An array containing all the factors computed with PARAFAC decomposition
-    errors: list
-        A list of reconstruction errors at each iteration of the algorithm.
+    cost_fct_vals: list
+        A list of the normalized cost function values, for every iteration of the algorithm.
     toc: list
         A list with accumulated time at each iterations
 
@@ -123,7 +123,7 @@ def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
     >>> T = ntf.tl.kruskal_tensor.kruskal_to_tensor(factors_0)
     >>> factors = ntf.ntf(T, rank, init = "random", n_iter_max = 500, tol = 1e-8,
                sparsity_coefficients = [None, None, None], fixed_modes = [], normalize = [False, False, False],
-               verbose = True, return_errors = False)
+               verbose = True, return_costs = False)
 
     References
     ----------
@@ -178,11 +178,11 @@ def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
 
     return compute_ntf(tensor, rank, factors, n_iter_max=n_iter_max, tol=tol,
                        sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, normalize = normalize,
-                       verbose=verbose, return_errors=return_errors)
+                       verbose=verbose, return_costs=return_costs)
 
 def compute_ntf(tensor_in, rank, factors_in, n_iter_max=100, tol=1e-8,
            sparsity_coefficients = [], fixed_modes = [], normalize = [],
-           verbose=False, return_errors=False):
+           verbose=False, return_costs=False):
 
     """
     Computation of a Nonnegative matrix factorization via
@@ -201,9 +201,9 @@ def compute_ntf(tensor_in, rank, factors_in, n_iter_max=100, tol=1e-8,
         The maximal number of iteration before stopping the algorithm
         Default: 100
     tol: float
-        Threshold on the improvement in reconstruction error.
-        Between two iterations, if the reconstruction error difference is
-        below this threshold, the algorithm stops.
+        Threshold on the improvement in cost function value.
+        Between two iterations, if the difference between 
+        both cost function values is below this threshold, the algorithm stops.
         Default: 1e-8
     sparsity_coefficients: List of float (as much as the number of modes)
         The sparsity coefficients on U and V respectively.
@@ -219,19 +219,19 @@ def compute_ntf(tensor_in, rank, factors_in, n_iter_max=100, tol=1e-8,
         Default: []
     verbose: boolean
         Indicates whether the algorithm prints the successive
-        reconstruction errors or not
+        normalized cost function values or not
         Default: False
-    return_errors: boolean
-        Indicates whether the algorithm should return all reconstruction errors
-        and computation time of each iteration or not
+    return_costs: boolean
+        Indicates whether the algorithm should return all normalized cost function 
+        values and computation time of each iteration or not
         Default: False
 
     Returns
     -------
     np.array(factors): numpy array
         An array containing all the factors computed with PARAFAC decomposition
-    errors: list
-        A list of reconstruction errors at each iteration of the algorithm.
+    cost_fct_vals: list
+        A list of the normalized cost function values, for every iteration of the algorithm.
     toc: list
         A list with accumulated time at each iterations
 
@@ -265,7 +265,7 @@ def compute_ntf(tensor_in, rank, factors_in, n_iter_max=100, tol=1e-8,
         normalize = [False for i in range(nb_modes)]
 
     # initialisation - declare local varaibles
-    rec_errors = []
+    cost_fct_vals = []
     tic = time.time()
     toc = []
 
@@ -277,33 +277,33 @@ def compute_ntf(tensor_in, rank, factors_in, n_iter_max=100, tol=1e-8,
     # Iterate over one step of NTF
     for iteration in range(n_iter_max):
         # One pass of least squares on each updated mode
-        factors, rec_error = one_ntf_step(unfolded_tensors, rank, factors, norm_tensor,
+        factors, cost = one_ntf_step(unfolded_tensors, rank, factors, norm_tensor,
                                           sparsity_coefficients, fixed_modes, normalize)
         # Store the computation time
         toc.append(time.time() - tic)
 
-        rec_errors.append(rec_error)
+        cost_fct_vals.append(cost)
 
         if verbose:
             if iteration == 0:
-                print('reconstruction error={}'.format(rec_errors[iteration]))
+                print('Normalized cost function value={}'.format(cost))
             else:
-                if rec_errors[-2] - rec_errors[-1] > 0:
-                    print('reconstruction error={}, variation={}.'.format(
-                            rec_errors[-1], rec_errors[-2] - rec_errors[-1]))
+                if cost_fct_vals[-2] - cost_fct_vals[-1] > 0:
+                    print('Normalized cost function value={}, variation={}.'.format(
+                            cost_fct_vals[-1], cost_fct_vals[-2] - cost_fct_vals[-1]))
                 else:
-                    print('\033[91m' + 'reconstruction error={}, variation={}.'.format(
-                            rec_errors[-1], rec_errors[-2] - rec_errors[-1]) + '\033[0m')
+                    # print in red when the reconstruction error is negative (shouldn't happen)
+                    print('\033[91m' + 'Normalized cost function value={}, variation={}.'.format(
+                            cost_fct_vals[-1], cost_fct_vals[-2] - cost_fct_vals[-1]) + '\033[0m')
 
-        if iteration > 0 and abs(rec_errors[-2] - rec_errors[-1]) < tol:
+        if iteration > 0 and abs(cost_fct_vals[-2] - cost_fct_vals[-1]) < tol:
             # Stop condition: relative error between last two iterations < tol
             if verbose:
-                print('converged in {} iterations.'.format(iteration))
+                print('Converged in {} iterations.'.format(iteration))
             break
 
-
-    if return_errors:
-        return np.array(factors), rec_errors, toc
+    if return_costs:
+        return np.array(factors), cost_fct_vals, toc
     else:
         return np.array(factors)
 
@@ -353,16 +353,14 @@ def one_ntf_step(unfolded_tensors, rank, in_factors, norm_tensor,
         of a PARAFAC computation.
         Default: 0.01
 
-
     Returns
     -------
     np.array(factors): numpy array
         An array containing all the factors computed with PARAFAC decomposition
-    errors: list
-        A list of reconstruction errors at each iteration of the algorithm.
-    toc: list
-        A list with accumulated time at each iterations
-
+    cost_fct_val:
+        The value of the cost function at this step,
+        normalized by the squared norm of the original tensor.
+        
     References
     ----------
     [1] Tamara G Kolda and Brett W Bader. "Tensor decompositions and applications",
@@ -411,6 +409,6 @@ def one_ntf_step(unfolded_tensors, rank, in_factors, norm_tensor,
 
     # error computation (improved using precomputed quantities)
     rec_error = norm_tensor ** 2 - 2*tl.dot(tl.tensor_to_vec(factors[mode]),tl.tensor_to_vec(rhs)) +  tl.norm(tl.dot(factors[mode],tl.transpose(krao)),2)**2
-    rec_error = (rec_error ** (1/2) + sparsity_error) / norm_tensor
+    cost_fct_val = (rec_error + sparsity_error) / (norm_tensor ** 2)
 
-    return factors, rec_error
+    return factors, cost_fct_val
