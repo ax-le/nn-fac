@@ -13,9 +13,15 @@ import tensorly as tl
 from tensorly.decomposition import tucker as tl_tucker
 import math
 import nn_fac.errors as err
+import nn_fac.mu as mu
+import nn_fac.beta_divergence as beta_div
+
+import numpy as np
+
+import scipy.sparse as sci_sparse
 
 def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_max=100, tol=1e-6,
-           sparsity_coefficients = [], fixed_modes = [], normalize = [], mode_core_norm = None, hals = False,
+           sparsity_coefficients = [], fixed_modes = [], normalize = [], mode_core_norm = None,
            verbose=False, return_costs=False, deterministic=False):
 
     """
@@ -102,9 +108,6 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
         Will only be useful if the last element of the previous "normalise" argument is set to True.
         Indexes of the modes start at 0.
         Default: None
-    hals: boolean
-        Whether to run hals (true) or gradient (false) update on the core.
-        Default (and recommanded): false
     verbose: boolean
         Indicates whether the algorithm prints the successive
         normalized cost function values or not
@@ -182,7 +185,7 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
         else:
             core = tl.tensor(np.random.rand(np.prod(ranks)).reshape(tuple(ranks)))
 
-    elif init.lower() == "tucker":
+    elif init.lower() == "tucker":        
         if deterministic:
             init_core, init_factors = tl_tucker(tensor, ranks, random_state = 8142)
         else:
@@ -220,10 +223,10 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
     return compute_ntd(tensor, ranks, core, factors, n_iter_max=n_iter_max, tol=tol,
                        sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, 
                        normalize = normalize, mode_core_norm = mode_core_norm,
-                       verbose=verbose, return_costs=return_costs, hals = hals, deterministic = deterministic)
+                       verbose=verbose, return_costs=return_costs, deterministic = deterministic)
 
 def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
-           sparsity_coefficients = [], fixed_modes = [], normalize = [], hals = False,mode_core_norm=None,
+           sparsity_coefficients = [], fixed_modes = [], normalize = [], mode_core_norm=None,
            verbose=False, return_costs=False, deterministic=False):
 
     """
@@ -270,9 +273,6 @@ def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
         Will only be useful if the last element of the previous "normalise" argument is set to True.
         Indexes of the modes start at 0.
         Default: None
-    hals: boolean
-        Whether to run hals (true) or gradient (false) update on the core.
-        Default (and recommanded): false
     verbose: boolean
         Indicates whether the algorithm prints the successive
         normalized cost function values or not
@@ -346,15 +346,15 @@ def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
     #for mode in range(tl.ndim(tensor)):
     #   unfolded_tensors.append(tl.base.unfold(tensor, mode))
 
-    # Iterate over one step of NTF
+    # Iterate over one step of NTD
     for iteration in range(n_iter_max):
         # One pass of least squares on each updated mode
         if deterministic:
             core, factors, cost = one_ntd_step(tensor, ranks, core, factors, norm_tensor,
-                                          sparsity_coefficients, fixed_modes, normalize, mode_core_norm, hals = hals, alpha = math.inf)
+                                          sparsity_coefficients, fixed_modes, normalize, mode_core_norm, alpha = math.inf)
         else:
             core, factors, cost = one_ntd_step(tensor, ranks, core, factors, norm_tensor,
-                                          sparsity_coefficients, fixed_modes, normalize, mode_core_norm, hals = hals)
+                                          sparsity_coefficients, fixed_modes, normalize, mode_core_norm)
 
         # Store the computation time
         toc.append(time.time() - tic)
@@ -387,7 +387,7 @@ def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
 
 def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
                  sparsity_coefficients, fixed_modes, normalize, mode_core_norm, 
-                 hals = False, alpha=0.5, delta=0.01):
+                 alpha=0.5, delta=0.01):
     """
     One pass of Hierarchical Alternating Least Squares update along all modes,
     and hals or gradient update on the core (depends on hals parameter),
@@ -430,9 +430,6 @@ def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
         Will only be useful if the last element of the previous "normalise" argument is set to True.
         Indexes of the modes start at 0.
         Default: None
-    hals: boolean
-        Whether to run hals (true) or gradient (false) update on the core.
-        Default (and recommanded): false
     alpha : positive float
         Ratio between outer computations and inner loops. Typically set to 0.5 or 1.
         Set to +inf in the deterministic mode, as it depends on runtime.
@@ -488,8 +485,8 @@ def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
         # some computations could be reused but the gain is small.
         elemprod = factors.copy()
         for i, factor in enumerate(factors):
-                if i != mode:
-                    elemprod[i] = tl.dot(tl.conj(tl.transpose(factor)), factor)
+            if i != mode:
+                elemprod[i] = tl.dot(tl.conj(tl.transpose(factor)), factor)
         # Second, the multiway product with core G
         temp = tl.tenalg.multi_mode_dot(core, elemprod, skip=mode)
         # this line can be computed with tensor contractions
@@ -521,9 +518,6 @@ def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
                maxiter=100, atime=timer, alpha=alpha, delta=delta,
                sparsity_coefficient = sparsity_coefficients[mode], normalize = normalize[mode])[0])
 
-    tensor_shape = tuple([i.shape[0] for i in factors])
-    core_shape = tuple(ranks)
-
     #refolded_tensor = tl.base.fold(unfolded_tensors[0], 0, tensor_shape)
 
     # Core update
@@ -533,51 +527,42 @@ def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
     all_MtX = tl.tenalg.mode_dot(temp, tl.transpose(factors[modes_list[-1]]), modes_list[-1])
     all_MtM = tl.copy(elemprod)
     all_MtM[modes_list[-1]] = factors[modes_list[-1]].T@factors[modes_list[-1]]
+
     #all_MtM = np.array([fac.T@fac for fac in factors])
 
-    if hals:
-        # not modified for speed by jeremy
-        # HALS
-        AtZ = tl.base.tensor_to_vec(all_MtX)
-        AtZ = AtZ.reshape(AtZ.shape[0], 1)
-        AtA = tl.tenalg.kronecker(all_MtM)
-        vectorized_core = tl.base.tensor_to_vec(core)
-        vectorized_core = nnls.hals_nnls_acc(AtZ, AtA, vectorized_core.reshape(vectorized_core.shape[0], 1),
-                    maxiter=100, atime=timer, alpha=alpha, delta=delta,
-                    sparsity_coefficient = sparsity_coefficients[-1], normalize = False)[0]
-        core = vectorized_core.reshape(core_shape)
+    # Projected gradient
+    gradient_step = 1
+    #print(f"factors[modes_list[-1]]: {factors[modes_list[-1]]}")        
 
+    #print(f"all_MtM: {all_MtM}")
+    for MtM in all_MtM:
+        #print(f"MtM: {MtM}")
+        gradient_step *= 1/(scipy.sparse.linalg.svds(MtM, k=1)[1][0])
+
+    gradient_step = round(gradient_step, 6) # Heurisitc, to avoid consecutive imprecision
+
+    cnt = 1
+    upd_0 = 0
+    upd = 1
+
+    if sparsity_coefficients[-1] is None:
+        sparse = 0
     else:
-        # Projected gradient
-        gradient_step = 1
+        sparse = sparsity_coefficients[-1]
 
-        for MtM in all_MtM:
-            gradient_step *= 1/(scipy.sparse.linalg.svds(MtM, k=1)[1][0])
+    # TODO: dynamic stopping criterion
+    # Maybe: try fast gradient instead of gradient
+    while cnt <= 300 and upd>= delta * upd_0:
+        gradient = - all_MtX + tl.tenalg.multi_mode_dot(core, all_MtM, transpose = False) + sparse * tl.ones(core.shape)
 
-        gradient_step = round(gradient_step, 6) # Heurisitc, to avoid consecutive imprecision
+        # Proposition of reformulation for error computations
+        delta_core = np.minimum(gradient_step*gradient, core)
+        core = core - delta_core
+        upd = tl.norm(delta_core)
+        if cnt == 1:
+            upd_0 = upd
 
-        cnt = 1
-        upd_0 = 0
-        upd = 1
-
-        if sparsity_coefficients[-1] is None:
-            sparse = 0
-        else:
-            sparse = sparsity_coefficients[-1]
-
-        # TODO: dynamic stopping criterion
-        # Maybe: try fast gradient instead of gradient
-        while cnt <= 300 and upd>= delta * upd_0:
-            gradient = - all_MtX + tl.tenalg.multi_mode_dot(core, all_MtM, transpose = False) + sparse * tl.ones(core.shape)
-
-            # Proposition of reformulation for error computations
-            delta_core = np.minimum(gradient_step*gradient, core)
-            core = core - delta_core
-            upd = tl.norm(delta_core)
-            if cnt == 1:
-                upd_0 = upd
-
-            cnt += 1
+        cnt += 1
 
     if normalize[-1]:
         unfolded_core = tl.unfold(core, mode_core_norm)
@@ -604,3 +589,180 @@ def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
     #print("diff: " + str(rec_error - exhaustive_rec_error))
     #print("max" + str(np.amax(factors[2])))
     return core, factors, cost_fct_val #  exhaustive_rec_error
+
+
+
+######################### Temporary, to test mu and not break everything (should be merged to ntd in the end)
+def ntd_mu(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_max=1000, tol=1e-6,
+           sparsity_coefficients = [], fixed_modes = [], normalize = [], mode_core_norm = None, beta = 2,
+           verbose=False, return_costs=False, deterministic=False):
+    factors = []
+    nb_modes = len(tensor.shape)
+
+    if type(ranks) is int:
+        ranks = [ranks for i in nb_modes]
+    elif len(ranks) != nb_modes:
+        raise err.InvalidRanksException("The number of ranks is different than the dim of the tensor, which is incorrect.") from None
+
+    for i in range(nb_modes):
+        if ranks[i] > tensor.shape[i]:
+            #raise err.InvalidRanksException("The " + str(i) + "-th mode rank is larger than the shape of the tensor, which is incorrect.") from None
+            ranks[i] = tensor.shape[i]
+            #warnings.warn('ignoring MIDI message %s' % msg)
+            print("The " + str(i) + "-th mode rank was larger than the shape of the tensor, which is incorrect. Set to the shape of the tensor")
+
+    if init.lower() == "random":
+        for mode in range(nb_modes):
+            if deterministic:
+                seed = np.random.RandomState(mode * 10)
+                random_array = seed.rand(tensor.shape[mode], ranks[mode])
+            else:
+                random_array = np.random.rand(tensor.shape[mode], ranks[mode])
+            factors.append(tl.tensor(random_array))
+
+        if deterministic:
+            seed = np.random.RandomState(nb_modes * 10)
+            core = tl.tensor(seed.rand(np.prod(ranks)).reshape(tuple(ranks)))
+        else:
+            core = tl.tensor(np.random.rand(np.prod(ranks)).reshape(tuple(ranks)))
+        
+        factors = [np.maximum(f, 1e-12) for f in factors]
+        core = np.maximum(core, 1e-12)
+
+    elif init.lower() == "tucker":        
+        if deterministic:
+            init_core, init_factors = tl_tucker(tensor, ranks, random_state = 8142)
+        else:
+            init_core, init_factors = tl_tucker(tensor, ranks)
+        factors = [np.maximum(tl.abs(f), 1e-12) for f in init_factors]
+        core = np.maximum(tl.abs(init_core), 1e-12)
+
+    elif init.lower() == "custom":
+        factors = factors_0
+        core = core_0
+        if len(factors) != nb_modes:
+            raise err.CustomNotEngouhFactors("Custom initialization, but not enough factors")
+        else:
+            for array in factors:
+                if array is None:
+                    raise err.CustomNotValidFactors("Custom initialization, but one factor is set to 'None'")
+            if core is None:
+                raise err.CustomNotValidCore("Custom initialization, but the core is set to 'None'")
+
+    else:
+        raise err.InvalidInitializationType('Initialization type not understood: ' + init)
+
+    return compute_ntd_mu(tensor, ranks, core, factors, n_iter_max=n_iter_max, tol=tol,
+                       sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, 
+                       normalize = normalize, mode_core_norm = mode_core_norm,
+                       verbose=verbose, return_costs=return_costs, beta = beta, deterministic = deterministic)
+
+def compute_ntd_mu(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
+           sparsity_coefficients = [], fixed_modes = [], normalize = [], beta = 2, mode_core_norm=None,
+           verbose=False, return_costs=False, deterministic=False):
+
+    # initialisation - store the input varaibles
+    core = core_in.copy()
+    factors = factors_in.copy()
+    tensor = tensor_in
+
+    norm_tensor = tl.norm(tensor, 2)
+
+    # set init if problem
+    #TODO: set them as warnings
+    nb_modes = len(tensor.shape)
+    if sparsity_coefficients == None or len(sparsity_coefficients) != nb_modes + 1:
+        print("Irrelevant number of sparsity coefficient (different from the number of modes + 1 for the core), they have been set to None.")
+        sparsity_coefficients = [None for i in range(nb_modes + 1)]
+    if fixed_modes == None:
+        fixed_modes = []
+    if normalize == None or len(normalize) != nb_modes + 1:
+        print("Irrelevant number of normalization booleans (different from the number of modes + 1 for the core), they have been set to False.")
+        normalize = [False for i in range(nb_modes + 1)]
+    if normalize[-1] and (mode_core_norm == None or mode_core_norm < 0 or mode_core_norm >= nb_modes):
+        print("The core was asked to be normalized, but an invalid mode was specified. Normalization has been set to False.")
+        normalize[-1] = False
+    if not normalize[-1] and (mode_core_norm != None and mode_core_norm >= 0 and mode_core_norm < nb_modes):
+        print("The core was asked NOT to be normalized, but mode_core_norm was set to a valid norm. Is this a mistake?")
+    
+    # initialisation - declare local varaibles
+    cost_fct_vals = []
+    tic = time.time()
+    toc = []
+
+    # initialisation - unfold the tensor according to the modes
+    #unfolded_tensors = []
+    #for mode in range(tl.ndim(tensor)):
+    #   unfolded_tensors.append(tl.base.unfold(tensor, mode))
+
+    # Iterate over one step of NTD
+    for iteration in range(n_iter_max):
+        # One pass of least squares on each updated mode
+        core, factors, cost = one_ntd_step_mu(tensor, ranks, core, factors, beta, norm_tensor,
+                                              fixed_modes, normalize, mode_core_norm)
+
+        # Store the computation time
+        toc.append(time.time() - tic)
+
+        cost_fct_vals.append(cost)
+
+        if verbose:
+            if iteration == 0:
+                print('Initial Obj={}'.format(cost))
+            else:
+                if cost_fct_vals[-2] - cost_fct_vals[-1] > 0:
+                    print('Iter={}|Obj={}| Var={} (target is {}).'.format(iteration,
+                            cost_fct_vals[-1], (abs(cost_fct_vals[-2] - cost_fct_vals[-1])/abs(cost_fct_vals[-2])),tol))
+                else:
+                    # print in red when the reconstruction error is negative (shouldn't happen)
+                    print('\033[91m' + 'Iter={}|Obj={}| Var={} (target is {}).'.format(iteration,
+                            cost_fct_vals[-1], (abs(cost_fct_vals[-2] - cost_fct_vals[-1])/abs(cost_fct_vals[-2])),tol) + '\033[0m')
+
+        if iteration > 0 and (abs(cost_fct_vals[-2] - cost_fct_vals[-1])/abs(cost_fct_vals[-2])) < tol:
+            # Stop condition: relative error between last two iterations < tol
+            if verbose:
+                print('Converged to the required tolerance in {} iterations.'.format(iteration))
+            break
+
+    if return_costs:
+        return core, factors, cost_fct_vals, toc
+    else:
+        return core, factors
+
+def one_ntd_step_mu(tensor, ranks, in_core, in_factors, beta, norm_tensor,
+                   fixed_modes, normalize, mode_core_norm):
+    # Copy
+    core = in_core.copy()
+    factors = in_factors.copy()
+
+    # Generating the mode update sequence
+    modes_list = [mode for mode in range(tl.ndim(tensor)) if mode not in fixed_modes]
+    
+    for mode in modes_list:
+        factors[mode] = mu.mu_betadivmin(factors[mode], tl.unfold(tl.tenalg.multi_mode_dot(core, factors, skip = mode), mode), tl.unfold(tensor,mode), beta)
+
+    core = mu.mu_tensorial(core, factors, tensor, beta)
+
+    if normalize[-1]:
+        unfolded_core = tl.unfold(core, mode_core_norm)
+        for idx_mat in range(unfolded_core.shape[0]):
+            if tl.norm(unfolded_core[idx_mat]) != 0:
+                unfolded_core[idx_mat] = unfolded_core[idx_mat] / tl.norm(unfolded_core[idx_mat], 2)
+        core = tl.fold(unfolded_core, mode_core_norm, core.shape)
+
+    # # Adding the l1 norm value to the reconstruction error
+    # sparsity_error = 0
+    # for index, sparse in enumerate(sparsity_coefficients):
+    #     if sparse:
+    #         if index < len(factors):
+    #             sparsity_error += 2 * (sparse * np.linalg.norm(factors[index], ord=1))
+    #         elif index == len(factors):
+    #             sparsity_error += 2 * (sparse * tl.norm(core, 1))
+    #         else:
+    #             raise NotImplementedError("TODEBUG: Too many sparsity coefficients, should have been raised before.")
+
+    reconstructed_tensor = tl.tenalg.multi_mode_dot(core, factors)
+
+    cost_fct_val = beta_div.beta_divergence(tensor, reconstructed_tensor, beta)
+    
+    return core, factors, cost_fct_val
