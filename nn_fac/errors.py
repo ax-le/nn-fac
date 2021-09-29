@@ -11,6 +11,8 @@ class CustomNotEngouhFactors(ArgumentException): pass
 class CustomNotValidFactors(ArgumentException): pass
 class CustomNotValidCore(ArgumentException): pass
 class InvalidInitializationType(ArgumentException): pass
+class InvalidArgumentValue(ArgumentException): pass
+
 
 class OptimException(BaseException): pass
 class ZeroColumnWhenUnautorized(OptimException): pass
