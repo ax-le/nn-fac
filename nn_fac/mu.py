@@ -15,9 +15,9 @@ import nn_fac.errors as err
 
 def mu_betadivmin(U, V, M, beta):
     """
-    ============================================================
+    =====================================================
     Beta-Divergence NMF solved with Multiplicative Update
-    ============================================================
+    =====================================================
 
     Computes an approximate solution of a beta-NMF
     [3] with the Multiplicative Update rule [2,3].

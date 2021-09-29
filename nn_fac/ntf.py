@@ -42,17 +42,19 @@ def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
 
     The optimization problem, for M_n, the n-th factor, is:
 
-        min_{M_n}||T - M_n (khatri-rao(M_l))^T||_Fro^2
+        min_{M_n} d(T - M_n (khatri-rao(M_l))^T)_{\beta}
         + 2 * sparsity_coefficients[n] * (\sum\limits_{j = 0}^{r}||V[k,:]||_1)
 
     With:
 
         l the index of all the modes except the n-th one
-        ||A||_Fro^2 = \sum_{i,j} A_{ij}^2 (Frobenius norm)
+        d(A)_{\beta} the elementwise beta-divergence,
         ||a||_1 = \sum_{i} abs(a_{i}) (Elementwise L1 norm)
 
-    More precisely, the chosen optimization algorithm is the HALS [1],
-    which updates each factor columnwise, fixing every other columns.
+    More precisely, the chosen optimization algorithm is either the HALS [1],
+    which updates each factor columnwise, fixing every other columns, 
+    and optimizes factors according to the euclidean norm,
+    or the MU [5,6], which optimizes the factors according to the $\beta$-divergence loss.
 
     Parameters
     ----------
@@ -84,6 +86,19 @@ def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
         Between two succesive iterations, if the difference between 
         both cost function values is below this threshold, the algorithm stops.
         Default: 1e-8
+    update_rule: string "hals" | "mu"
+        The chosen update rule.
+        HALS performs optimization with the euclidean norm,
+        MU performs the optimization using the $\beta$-divergence loss, 
+        which generalizes the Euclidean norm, and the Kullback-Leibler and 
+        Itakura-Saito divergences.
+        The chosen beta-divergence is specified with the parameter `beta`.
+    beta: float
+        The beta parameter for the beta-divergence.
+        Only useful if update_rule is set to "mu".
+        2 - Euclidean norm
+        1 - Kullback-Leibler divergence
+        0 - Itakura-Saito divergence
     sparsity_coefficients: array of float (as much as the number of modes)
         The sparsity coefficients on U and V respectively.
         If set to None, the algorithm is computed without sparsity
@@ -147,6 +162,14 @@ def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
 
     [4] J. Kossai et al. "TensorLy: Tensor Learning in Python",
     arxiv preprint (2018)
+    
+    [5] Févotte, C., & Idier, J. (2011). 
+    Algorithms for nonnegative matrix factorization with the β-divergence. 
+    Neural computation, 23(9), 2421-2456.
+    
+    [6] Lee, D. D., & Seung, H. S. (1999). 
+    Learning the parts of objects by non-negative matrix factorization.
+    Nature, 401(6755), 788-791.
 
     - Tamara G Kolda and Brett W Bader. "Tensor decompositions and applications",
     SIAM review 51.3 (2009), pp. 455{500.
@@ -195,6 +218,7 @@ def compute_ntf(tensor_in, rank, factors_in, n_iter_max=100, tol=1e-8,
     """
     Computation of a Nonnegative matrix factorization via
     hierarchical alternating least squares (HALS) [1],
+    or Multiplicative Update (MU) [2],
     with factors_in as initialization.
 
     Parameters
@@ -213,6 +237,18 @@ def compute_ntf(tensor_in, rank, factors_in, n_iter_max=100, tol=1e-8,
         Between two iterations, if the difference between 
         both cost function values is below this threshold, the algorithm stops.
         Default: 1e-8
+    update_rule: string "hals" | "mu"
+        The chosen update rule.
+        HALS performs optimization with the euclidean norm,
+        MU performs the optimization using the $\beta$-divergence loss, 
+        which generalizes the Euclidean norm, and the Kullback-Leibler and 
+        Itakura-Saito divergences.
+        The chosen beta-divergence is specified with the parameter `beta`.
+    beta: float
+        The beta parameter for the beta-divergence.
+        2 - Euclidean norm
+        1 - Kullback-Leibler divergence
+        0 - Itakura-Saito divergence
     sparsity_coefficients: List of float (as much as the number of modes)
         The sparsity coefficients on U and V respectively.
         If set to None, the algorithm is computed without sparsity
@@ -248,6 +284,10 @@ def compute_ntf(tensor_in, rank, factors_in, n_iter_max=100, tol=1e-8,
     [1]: N. Gillis and F. Glineur, Accelerated Multiplicative Updates and
     Hierarchical ALS Algorithms for Nonnegative Matrix Factorization,
     Neural Computation 24 (4): 1085-1105, 2012.
+    
+    [2] Févotte, C., & Idier, J. (2011). 
+    Algorithms for nonnegative matrix factorization with the β-divergence. 
+    Neural computation, 23(9), 2421-2456.
 
     - Tamara G Kolda and Brett W Bader. "Tensor decompositions and applications",
     SIAM review 51.3 (2009), pp. 455{500.
@@ -322,13 +362,10 @@ def one_ntf_step(unfolded_tensors, rank, in_factors, norm_tensor, update_rule, b
     """
     One pass of Hierarchical Alternating Least Squares update along all modes
 
-    Update the factors by solving a least squares problem per mode, as described in [1].
+    Update the factors by solving a least squares problem per mode (in hals), as described in [1],
+    or using the Multiplicative Update for the entire factors [2].
 
-    Note that the unfolding order is the one described in [2], which is different from [1].
-
-    This function is strictly superior to a least squares solver ran on the
-    matricized problems min_X ||Y - AX||_F^2 since A is structured as a
-    Kronecker product of other factors.
+    Note that the unfolding order is the one described in [3], which is different from [1].
 
     Parameters
     ----------
@@ -343,6 +380,18 @@ def one_ntf_step(unfolded_tensors, rank, in_factors, norm_tensor, update_rule, b
         Rank of the decomposition.
     norm_tensor : float
         The Frobenius norm of the input tensor
+    update_rule: string "hals" | "mu"
+        The chosen update rule.
+        HALS performs optimization with the euclidean norm,
+        MU performs the optimization using the $\beta$-divergence loss, 
+        which generalizes the Euclidean norm, and the Kullback-Leibler and 
+        Itakura-Saito divergences.
+        The chosen beta-divergence is specified with the parameter `beta`.
+    beta: float
+        The beta parameter for the beta-divergence.
+        2 - Euclidean norm
+        1 - Kullback-Leibler divergence
+        0 - Itakura-Saito divergence
     sparsity_coefficients : List of floats
         sparsity coefficients for every mode.
     fixed_modes : List of integers
@@ -373,8 +422,12 @@ def one_ntf_step(unfolded_tensors, rank, in_factors, norm_tensor, update_rule, b
     ----------
     [1] Tamara G Kolda and Brett W Bader. "Tensor decompositions and applications",
     SIAM review 51.3 (2009), pp. 455{500.
+    
+    [2] Févotte, C., & Idier, J. (2011). 
+    Algorithms for nonnegative matrix factorization with the β-divergence. 
+    Neural computation, 23(9), 2421-2456.
 
-    [2] Jeremy E Cohen. "About notations in multiway array processing",
+    [3] Jeremy E Cohen. "About notations in multiway array processing",
     arXiv preprint arXiv:1511.01306, (2015).
     """
 

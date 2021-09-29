@@ -32,21 +32,25 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
 
     The objective function is:
 
-        ||M - UV||_Fro^2
+        d(M - UV)_{\beta}
         + sparsity_coefficients[0] * (\sum\limits_{j = 0}^{r}||U[:,k]||_1)
         + sparsity_coefficients[1] * (\sum\limits_{j = 0}^{r}||V[k,:]||_1)
 
     With:
 
-        ||A||_Fro^2 = \sum_{i,j} A_{ij}^2 (Frobenius norm)
+        d(A)_{\beta} the elementwise $\beta$-divergence,
         ||a||_1 = \sum_{i} abs(a_{i}) (Elementwise L1 norm)
 
     The objective function is minimized by fixing alternatively
-    one of both factors U and V and optimizing on the other one,
-    the problem being reduced to a Nonnegative Least Squares problem.
-
+    one of both factors U and V and optimizing on the other one.
     More precisely, the chosen optimization algorithm is the HALS [1],
-    which updates each factor columnwise, fixing every other columns.
+    which updates each factor columnwise, fixing every other columns,
+    each subproblem being reduced to a Nonnegative Least Squares problem 
+    if the update_rule is "hals",
+    or by using the Multiplicative Update [4,5] on each factor
+    if the update_rule is "mu".
+    The MU is minimizes the $\beta$-divergence,
+    whereas the HALS minimizes the Frobenius norm only.
 
     Parameters
     ----------
@@ -81,6 +85,20 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
         Between two succesive iterations, if the difference between 
         both cost function values is below this threshold, the algorithm stops.
         Default: 1e-8
+    update_rule: string "hals" | "mu"
+        The chosen update rule.
+        HALS performs optimization with the euclidean norm,
+        MU performs the optimization using the $\beta$-divergence loss, 
+        which generalizes the Euclidean norm, and the Kullback-Leibler and 
+        Itakura-Saito divergences.
+        The chosen beta-divergence is specified with the parameter `beta`.
+        Default: "hals"
+    beta: float
+        The beta parameter for the beta-divergence.
+        2 - Euclidean norm
+        1 - Kullback-Leibler divergence
+        0 - Itakura-Saito divergence
+        Default: 2
     sparsity_coefficients: List of float (two)
         The sparsity coefficients on U and V respectively.
         If set to None, the algorithm is computed without sparsity
@@ -138,6 +156,14 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
     [3]: B. Zupan et al. "Nimfa: A python library for nonnegative matrix
     factorization", Journal of Machine Learning Research 13.Mar (2012),
     pp. 849{853.
+    
+    [4] Févotte, C., & Idier, J. (2011). 
+    Algorithms for nonnegative matrix factorization with the β-divergence. 
+    Neural computation, 23(9), 2421-2456.
+    
+    [5] Lee, D. D., & Seung, H. S. (1999). 
+    Learning the parts of objects by non-negative matrix factorization.
+    Nature, 401(6755), 788-791.
     """
     if init.lower() == "random":
         k, n = data.shape
@@ -167,6 +193,7 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
     """
     Computation of a Nonnegative matrix factorization via
     hierarchical alternating least squares (HALS) [1],
+    or Multiplicative Update (MU) [2],
     with U_in and V_in as initialization.
 
     Parameters
@@ -187,6 +214,20 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
         Between two iterations, if the difference between 
         both cost function values is below this threshold, the algorithm stops.
         Default: 1e-8
+    update_rule: string "hals" | "mu"
+        The chosen update rule.
+        HALS performs optimization with the euclidean norm,
+        MU performs the optimization using the $\beta$-divergence loss, 
+        which generalizes the Euclidean norm, and the Kullback-Leibler and 
+        Itakura-Saito divergences.
+        The chosen beta-divergence is specified with the parameter `beta`.
+        Default: "hals"
+    beta: float
+        The beta parameter for the beta-divergence.
+        2 - Euclidean norm
+        1 - Kullback-Leibler divergence
+        0 - Itakura-Saito divergence
+        Default: 2
     sparsity_coefficients: List of float (two)
         The sparsity coefficients on U and V respectively.
         If set to None, the algorithm is computed without sparsity
@@ -222,6 +263,10 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
     [1]: N. Gillis and F. Glineur, Accelerated Multiplicative Updates and
     Hierarchical ALS Algorithms for Nonnegative Matrix Factorization,
     Neural Computation 24 (4): 1085-1105, 2012.
+    
+    [2] Févotte, C., & Idier, J. (2011). 
+    Algorithms for nonnegative matrix factorization with the β-divergence. 
+    Neural computation, 23(9), 2421-2456.
     """
     # initialisation
     U = U_in.copy()
@@ -276,7 +321,10 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
                  sparsity_coefficients, fixed_modes, normalize):
     """
     One pass of updates for each factor in NMF
-    Update the factors by solving a nonnegative least squares problem per mode.
+    Update the factors by solving a nonnegative least squares problem per mode
+    if the update_rule is "hals",
+    or by using the Multiplicative Update on each factor
+    if the update_rule is "mu".
 
     Parameters
     ----------
@@ -290,6 +338,20 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
         Initial V factor, of size r*n
     norm_data: float
         The Frobenius norm of the input matrix (data)
+    update_rule: string "hals" | "mu"
+        The chosen update rule.
+        HALS performs optimization with the euclidean norm,
+        MU performs the optimization using the $\beta$-divergence loss, 
+        which generalizes the Euclidean norm, and the Kullback-Leibler and 
+        Itakura-Saito divergences.
+        The chosen beta-divergence is specified with the parameter `beta`.
+        Default: "hals"
+    beta: float
+        The beta parameter for the beta-divergence.
+        2 - Euclidean norm
+        1 - Kullback-Leibler divergence
+        0 - Itakura-Saito divergence
+        Default: 2
     sparsity_coefficients: List of float (two)
         The sparsity coefficients on U and V respectively.
         If set to None, the algorithm is computed without sparsity
