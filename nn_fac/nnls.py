@@ -13,9 +13,9 @@ def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01
 ## Author : Axel Marmoret, based on Jeremy Cohen version's of Nicolas Gillis Matlab's code for HALS
 
     """
-    =================================
-    Non Negative Least Squares (NNLS)
-    =================================
+    ===========================================================================
+    Non Negative Least Squares (NNLS) with Hierachical Alternating Least Square
+    ===========================================================================
 
     Computes an approximate solution of a nonnegative least
     squares problem (NNLS) with an exact block-coordinate descent scheme.
@@ -145,7 +145,7 @@ def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01
                     V[k,:] = V[k,:] + deltaV
 
                 else:
-                    deltaV = np.maximum((UtM[k,:]- UtU[k,:]@V) / UtU[k,k],-V[k,:]) # Element wise maximum -> good idea ?
+                    deltaV = np.maximum((UtM[k,:]- UtU[k,:]@V) / UtU[k,k],-V[k,:])
                     V[k,:] = V[k,:] + deltaV
 
                 nodelta = nodelta + np.dot(deltaV, np.transpose(deltaV))
@@ -178,6 +178,8 @@ def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01
 
     return V, eps, cnt, rho
 
+#### Sandbox of NNLS, for specials cases (as PARAFAC2 as other constraints than sparsity).
+#### This code is flagged as "sandbow" because it's not properly tested.
 
 # NNLS resolution while approaching another matrix
 def hals_coupling_nnls_acc(UtM, UtU, in_V, Vtarget, mu,
@@ -753,7 +755,7 @@ def keep_most_powerful(data, percentage):
     """
     somme = 0
     the_test = np.array(data.copy())
-    norm_of_ref = np.linalg.norm(the_test, ord=fro)**2
+    norm_of_ref = np.linalg.norm(the_test, ord="fro")**2
     current_max = 0
     while(somme < percentage * norm_of_ref / 100):
         current_max = np.amax(the_test)
