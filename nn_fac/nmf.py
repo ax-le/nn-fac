@@ -8,12 +8,16 @@ Created on Tue Jun 11 15:49:25 2019
 import numpy as np
 import time
 import nn_fac.nnls as nnls
+import nn_fac.mu as mu
+import nn_fac.beta_divergence as beta_div
+import nn_fac.errors as err
 from nimfa.methods import seeding
 
 
 def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol=1e-8,
-           sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
-           verbose=False, return_costs=False):
+        update_rule = "hals", beta = 2,
+        sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
+        verbose=False, return_costs=False):
     """
     ======================================
     Nonnegative Matrix Factorization (NMF)
@@ -151,13 +155,15 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
         raise Exception('Initialization type not understood')
 
     return compute_nmf(data, rank, U_0, V_0, n_iter_max=n_iter_max, tol=tol,
-                   sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, normalize = normalize,
-                   verbose=verbose, return_costs=return_costs)
+                       update_rule = update_rule, beta = beta,
+                       sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, normalize = normalize,
+                       verbose=verbose, return_costs=return_costs)
 
 # Author : Jeremy Cohen, modified by Axel Marmoret
 def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
-           sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
-           verbose=False, return_costs=False):
+                update_rule = "hals", beta = 2,
+                sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
+                verbose=False, return_costs=False):
     """
     Computation of a Nonnegative matrix factorization via
     hierarchical alternating least squares (HALS) [1],
@@ -235,8 +241,8 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
     for iteration in range(n_iter_max):
 
         # One pass of least squares on each updated mode
-        U, V, cost = one_nmf_step(data, rank, U, V, norm_data,
-                                       sparsity_coefficients, fixed_modes, normalize)
+        U, V, cost = one_nmf_step(data, rank, U, V, norm_data, update_rule, beta,
+                                  sparsity_coefficients, fixed_modes, normalize)
 
         toc.append(time.time() - tic)
 
@@ -266,7 +272,7 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
         return np.array(U), np.array(V)
 
 
-def one_nmf_step(data, rank, U_in, V_in, norm_data,
+def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
                  sparsity_coefficients, fixed_modes, normalize):
     """
     One pass of updates for each factor in NMF
@@ -305,6 +311,10 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data,
         The value of the cost function at this step,
         normalized by the squared norm of the original matrix.
     """
+    if update_rule not in ["hals", "mu"]:
+        raise err.InvalidArgumentValue(f"Invalid update rule: {update_rule}") from None
+    if update_rule == "hals" and beta  != 2:
+        raise err.InvalidArgumentValue(f"The hals is only valid for the frobenius norm, corresponding to the beta divergence with beta = 2. Here, beta was set to {beta}. To compute NMF with this value of beta, please use the mu update_rule.") from None
 
     if len(sparsity_coefficients) != 2:
         raise ValueError("NMF needs 2 sparsity coefficients to be performed")
@@ -315,41 +325,53 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data,
 
     if 0 not in fixed_modes:
         # U update
-
-        # Set timer for acceleration in hals_nnls_acc
-        tic = time.time()
-
-        # Computing cross products
-        VVt = np.dot(V,np.transpose(V))
-        VMt = np.dot(V,np.transpose(data))
-
-        # End timer for acceleration in hals_nnls_acc
-        timer = time.time() - tic
-
-        # Compute HALS/NNLS resolution
-        U = np.transpose(nnls.hals_nnls_acc(VMt, VVt, np.transpose(U_in), maxiter=100, atime=timer, alpha=0.5, delta=0.01,
-                                            sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False)[0])
+        
+        if update_rule == "hals":
+            # Set timer for acceleration in hals_nnls_acc
+            tic = time.time()
+    
+            # Computing cross products
+            VVt = np.dot(V,np.transpose(V))
+            VMt = np.dot(V,np.transpose(data))
+    
+            # End timer for acceleration in hals_nnls_acc
+            timer = time.time() - tic
+    
+            # Compute HALS/NNLS resolution
+            U = np.transpose(nnls.hals_nnls_acc(VMt, VVt, np.transpose(U_in), maxiter=100, atime=timer, alpha=0.5, delta=0.01,
+                                                sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False)[0])
+        
+        elif update_rule == "mu":
+            U = mu.mu_betadivmin(U, V, data, beta)
 
     if 1 not in fixed_modes:
         # V update
 
-        # Set timer for acceleration in hals_nnls_acc
-        tic = time.time()
-
-        # Computing cross products
-        UtU = np.dot(np.transpose(U),U)
-        UtM = np.dot(np.transpose(U),data)
-
-        # End timer for acceleration in hals_nnls_acc
-        timer = time.time() - tic
-
-        # Compute HALS/NNLS resolution
-        V = nnls.hals_nnls_acc(UtM, UtU, V_in, maxiter=100, atime=timer, alpha=0.5, delta=0.01,
-                               sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False)[0]
+        if update_rule == "hals":
+            # Set timer for acceleration in hals_nnls_acc
+            tic = time.time()
+    
+            # Computing cross products
+            UtU = np.dot(np.transpose(U),U)
+            UtM = np.dot(np.transpose(U),data)
+    
+            # End timer for acceleration in hals_nnls_acc
+            timer = time.time() - tic
+    
+            # Compute HALS/NNLS resolution
+            V = nnls.hals_nnls_acc(UtM, UtU, V_in, maxiter=100, atime=timer, alpha=0.5, delta=0.01,
+                                   sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False)[0]
+        
+        elif update_rule == "mu":
+            V = np.transpose(mu.mu_betadivmin(V.T, U.T, data.T, beta))
 
     sparsity_coefficients = np.where(np.array(sparsity_coefficients) == None, 0, sparsity_coefficients)
-
-    cost = np.linalg.norm(data-np.dot(U,V), ord='fro') ** 2 + 2 * (sparsity_coefficients[0] * np.linalg.norm(U, ord=1) + sparsity_coefficients[1] * np.linalg.norm(V, ord=1))
+    
+    if update_rule == "hals":
+        cost = np.linalg.norm(data-np.dot(U,V), ord='fro') ** 2 + 2 * (sparsity_coefficients[0] * np.linalg.norm(U, ord=1) + sparsity_coefficients[1] * np.linalg.norm(V, ord=1))
+    
+    elif update_rule == "mu":
+        cost = beta_div.beta_divergence(data, np.dot(U,V), beta)
 
     cost = cost/(norm_data**2)
 
