@@ -8,12 +8,18 @@ Created on Tue Jun 11 16:52:21 2019
 import numpy as np
 import time
 import nn_fac.nnls as nnls
+import nn_fac.errors as err
+import nn_fac.mu as mu
+import nn_fac.beta_divergence as beta_div
+
 import tensorly as tl
 from nimfa.methods import seeding
 
+
 def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
-           sparsity_coefficients = [], fixed_modes = [], normalize = [],
-           verbose=False, return_costs=False):
+        update_rule = "hals", beta = 2,
+        sparsity_coefficients = [], fixed_modes = [], normalize = [],
+        verbose=False, return_costs=False):
 
     """
     ======================================
@@ -177,12 +183,14 @@ def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
         raise Exception('Initialization type not understood')
 
     return compute_ntf(tensor, rank, factors, n_iter_max=n_iter_max, tol=tol,
+                       update_rule = update_rule, beta = beta,
                        sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, normalize = normalize,
                        verbose=verbose, return_costs=return_costs)
 
 def compute_ntf(tensor_in, rank, factors_in, n_iter_max=100, tol=1e-8,
-           sparsity_coefficients = [], fixed_modes = [], normalize = [],
-           verbose=False, return_costs=False):
+                update_rule = "hals", beta = 2,
+                sparsity_coefficients = [], fixed_modes = [], normalize = [],
+                verbose=False, return_costs=False):
 
     """
     Computation of a Nonnegative matrix factorization via
@@ -277,8 +285,8 @@ def compute_ntf(tensor_in, rank, factors_in, n_iter_max=100, tol=1e-8,
     # Iterate over one step of NTF
     for iteration in range(n_iter_max):
         # One pass of least squares on each updated mode
-        factors, cost = one_ntf_step(unfolded_tensors, rank, factors, norm_tensor,
-                                          sparsity_coefficients, fixed_modes, normalize)
+        factors, cost = one_ntf_step(unfolded_tensors, rank, factors, norm_tensor, update_rule, beta,
+                                     sparsity_coefficients, fixed_modes, normalize)
         # Store the computation time
         toc.append(time.time() - tic)
 
@@ -308,7 +316,7 @@ def compute_ntf(tensor_in, rank, factors_in, n_iter_max=100, tol=1e-8,
         return np.array(factors)
 
 
-def one_ntf_step(unfolded_tensors, rank, in_factors, norm_tensor,
+def one_ntf_step(unfolded_tensors, rank, in_factors, norm_tensor, update_rule, beta,
                  sparsity_coefficients, fixed_modes, normalize,
                  alpha=0.5, delta=0.01):
     """
@@ -370,6 +378,11 @@ def one_ntf_step(unfolded_tensors, rank, in_factors, norm_tensor,
     arXiv preprint arXiv:1511.01306, (2015).
     """
 
+    if update_rule not in ["hals", "mu"]:
+        raise err.InvalidArgumentValue(f"Invalid update rule: {update_rule}") from None
+    if update_rule == "hals" and beta  != 2:
+        raise err.InvalidArgumentValue(f"The hals is only valid for the frobenius norm, corresponding to the beta divergence with beta = 2. Here, beta was set to {beta}. To compute NMF with this value of beta, please use the mu update_rule.") from None
+
     # Avoiding errors
     for fixed_value in fixed_modes:
         sparsity_coefficients[fixed_value] = None
@@ -381,25 +394,29 @@ def one_ntf_step(unfolded_tensors, rank, in_factors, norm_tensor,
     gen = [mode for mode in range(len(unfolded_tensors)) if mode not in fixed_modes]
 
     for mode in gen:
-
-        tic = time.time()
-
-        # Computing Hadamard of cross-products
-        cross = tl.tensor(tl.ones((rank,rank)))#, **tl.context(tensor))
-        for i, factor in enumerate(factors):
-            if i != mode:
-                cross *= tl.dot(tl.transpose(factor),factor)
-
-        # Computing the Khatri Rao product
-        krao = tl.tenalg.khatri_rao(factors, skip_matrix = mode)
-        rhs = tl.dot(unfolded_tensors[mode],krao)
-
-        timer = time.time() - tic
-
-        # Call the hals resolution with nnls, optimizing the current mode
-        factors[mode] = tl.transpose(nnls.hals_nnls_acc(tl.transpose(rhs), cross, tl.transpose(factors[mode]),
-               maxiter=100, atime=timer, alpha=alpha, delta=delta,
-               sparsity_coefficient = sparsity_coefficients[mode], normalize = normalize[mode])[0])
+        if update_rule == "hals":
+            tic = time.time()
+    
+            # Computing Hadamard of cross-products
+            cross = tl.tensor(tl.ones((rank,rank)))#, **tl.context(tensor))
+            for i, factor in enumerate(factors):
+                if i != mode:
+                    cross *= tl.dot(tl.transpose(factor),factor)
+    
+            # Computing the Khatri Rao product
+            krao = tl.tenalg.khatri_rao(factors, skip_matrix = mode)
+            rhs = tl.dot(unfolded_tensors[mode],krao)
+    
+            timer = time.time() - tic
+    
+            # Call the hals resolution with nnls, optimizing the current mode
+            factors[mode] = tl.transpose(nnls.hals_nnls_acc(tl.transpose(rhs), cross, tl.transpose(factors[mode]),
+                   maxiter=100, atime=timer, alpha=alpha, delta=delta,
+                   sparsity_coefficient = sparsity_coefficients[mode], normalize = normalize[mode])[0])
+            
+        elif update_rule == "mu":
+            krao = tl.tenalg.khatri_rao(factors, skip_matrix = mode)
+            factors[mode] = mu.mu_betadivmin(factors[mode], krao.T, unfolded_tensors[mode], beta)
 
     # Adding the l1 norm value to the reconstruction error
     sparsity_error = 0
@@ -407,8 +424,13 @@ def one_ntf_step(unfolded_tensors, rank, in_factors, norm_tensor,
         if sparse:
             sparsity_error += 2 * (sparse * np.linalg.norm(factors[index], ord=1))
 
-    # error computation (improved using precomputed quantities)
-    rec_error = norm_tensor ** 2 - 2*tl.dot(tl.tensor_to_vec(factors[mode]),tl.tensor_to_vec(rhs)) +  tl.norm(tl.dot(factors[mode],tl.transpose(krao)),2)**2
+    if update_rule == "hals":
+        # error computation (improved using precomputed quantities)
+        rec_error = norm_tensor ** 2 - 2*tl.dot(tl.tensor_to_vec(factors[mode]),tl.tensor_to_vec(rhs)) +  tl.norm(tl.dot(factors[mode],tl.transpose(krao)),2)**2
+    
+    elif update_rule == "mu":
+        rec_error = beta_div.beta_divergence(unfolded_tensors[mode], factors[mode]@krao.T, beta)
+        
     cost_fct_val = (rec_error + sparsity_error) / (norm_tensor ** 2)
 
     return factors, cost_fct_val
