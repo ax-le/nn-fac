@@ -6,14 +6,12 @@ Created on Tue Feb 25 13:47:27 2020
 """
 # Tests on development of the NTD algorithm.
 
-import context
-
 import unittest
 import tensorly as tl
 import random
 import numpy as np
-from NTD import ntd
-import errors as err
+from nn_fac.ntd import ntd
+import nn_fac.errors as err
 
 class NTDTests(unittest.TestCase):
     
@@ -36,10 +34,7 @@ class NTDTests(unittest.TestCase):
         with self.assertRaises(err.InvalidRanksException):
             core, facs, errs, toc = ntd(self.init_by_product_tensor, [30,10], init = "random", return_costs = True, verbose = False,
                                     sparsity_coefficients = [None, None, None, None], normalize = [False, False, False, False])
-        with self.assertRaises(err.InvalidRanksException):
-            core, facs, errs, toc = ntd(self.init_by_product_tensor, [30,120,40], init = "random", return_costs = True, verbose = False,
-                                    sparsity_coefficients = [None, None, None, None], normalize = [False, False, False, False])
-    
+
     def test_invalid_init_values(self):
         with self.assertRaises(err.InvalidInitializationType):
             core, facs, errs, toc = ntd(self.init_by_product_tensor, [30,10,10], init = "string", return_costs = True, verbose = False,
@@ -82,16 +77,16 @@ class NTDTests(unittest.TestCase):
         self.assertTrue(self.strictly_decreasing(errs))
                 
     # %% Determinism testing
-    def preserve_error_n_iterations(self, tensor, ranks, nb_iter = 2, n_iter_ntd = 100, hals = False, init = "random",
+    def preserve_error_n_iterations(self, tensor, ranks, nb_iter = 2, n_iter_ntd = 100, init = "random",
                                     sparsity_coefficients = [None, None, None, None], 
                                     normalize = [False,False,False,False], deterministic = True):
         
         first_iteration = ntd(tensor, ranks, init = init, n_iter_max=n_iter_ntd, tol=1e-6,
-                    sparsity_coefficients = sparsity_coefficients, fixed_modes = [], normalize = normalize, hals = hals,
+                    sparsity_coefficients = sparsity_coefficients, fixed_modes = [], normalize = normalize,
                     verbose=False, return_costs=True, deterministic = deterministic)
         for i in range(nb_iter - 1):
             this_try = ntd(tensor, ranks, init = init, n_iter_max=n_iter_ntd, tol=1e-6,
-                    sparsity_coefficients = sparsity_coefficients, fixed_modes = [], normalize = normalize, hals = hals,
+                    sparsity_coefficients = sparsity_coefficients, fixed_modes = [], normalize = normalize,
                     verbose=False, return_costs=True, deterministic = deterministic)
             if (first_iteration[2][-1] - this_try[2][-1]) != 0:
                 return False
@@ -103,19 +98,19 @@ class NTDTests(unittest.TestCase):
         This is the "Light" test, relatively fast to compute, but less complete than "heavy testing" function.
         """
         self.assertTrue(self.preserve_error_n_iterations(self.tensor, [5,5,5], nb_iter = 2,
-                                                  init = "random", deterministic = True, hals = False))
+                                                  init = "random", deterministic = True))
         self.assertTrue(self.preserve_error_n_iterations(self.tensor, [5,5,5], nb_iter = 2, 
-                                                init = "random", deterministic = True, hals = True))
+                                                init = "random", deterministic = True))
         self.assertTrue(self.preserve_error_n_iterations(self.tensor, [5,5,5], nb_iter = 2, 
-                                                init = "tucker", deterministic = True, hals = False))
+                                                init = "tucker", deterministic = True))
         self.assertTrue(self.preserve_error_n_iterations(self.tensor, [5,5,5], nb_iter = 2, 
-                                                init = "tucker", deterministic = True, hals = True))
+                                                init = "tucker", deterministic = True))
         self.assertFalse(self.preserve_error_n_iterations(self.tensor, [5,5,5], nb_iter = 2, 
-                                                init = "random", deterministic = False, hals = False))
+                                                init = "random", deterministic = False))
         self.assertFalse(self.preserve_error_n_iterations(self.tensor, [5,5,5], nb_iter = 2, 
-                                                init = "random", deterministic = False, hals = True))
+                                                init = "random", deterministic = False))
     
-    # # Heavy testing, long to compute, prefere it to be commented when running the tests.
+    # # Heavy testing, long to compute, prefer it to be commented when running the tests.
     # def test_heavy_determinism(self):
     #     """
     #     Verifies that the "determinist" argument is correct, meaning that the result is deterministic.
@@ -123,17 +118,17 @@ class NTDTests(unittest.TestCase):
     #     but long to compute.
     #     """
     #     self.assertTrue(self.preserve_error_n_iterations(self.tensor, [17,18,19], nb_iter = 5,
-    #                                               init = "random", deterministic = True, hals = False))
+    #                                               init = "random", deterministic = True))
     #     self.assertTrue(self.preserve_error_n_iterations(self.tensor, [17,18,19], nb_iter = 5, 
-    #                                             init = "random", deterministic = True, hals = True))
+    #                                             init = "random", deterministic = True))
     #     self.assertTrue(self.preserve_error_n_iterations(self.tensor, [17,18,19], nb_iter = 5, 
-    #                                             init = "tucker", deterministic = True, hals = False))
+    #                                             init = "tucker", deterministic = True))
     #     self.assertTrue(self.preserve_error_n_iterations(self.tensor, [17,18,19], nb_iter = 5, 
-    #                                             init = "tucker", deterministic = True, hals = True))
+    #                                             init = "tucker", deterministic = True))
     #     self.assertFalse(self.preserve_error_n_iterations(self.tensor, [17,18,19], nb_iter = 5, 
-    #                                             init = "random", deterministic = False, hals = False))
+    #                                             init = "random", deterministic = False))
     #     self.assertFalse(self.preserve_error_n_iterations(self.tensor, [17,18,19], nb_iter = 5, 
-    #                                             init = "random", deterministic = False, hals = True))
+    #                                             init = "random", deterministic = False))
 
 # %% Run tests
 if __name__ == '__main__':

@@ -10,10 +10,9 @@ import unittest
 import random
 import numpy as np
 import nn_fac.nnls as nnls
-import errors as err
+import nn_fac.errors as err
 
 class NnlsTests(unittest.TestCase):
-    
 
     def test_wrong_arguments(self):
         """

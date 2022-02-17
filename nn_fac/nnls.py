@@ -7,6 +7,7 @@ Created on Fri Jun  7 16:40:44 2019
 
 import numpy as np
 import time
+import nn_fac.errors as err
 
 def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01,
                   sparsity_coefficient = None, normalize = False, nonzero = False):
@@ -114,7 +115,13 @@ def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01
     (IEEE Cat. No. 04CH37541). Vol. 4. IEEE, 2004.
 
     """
-
+    if len(np.shape(UtM)) != 2:
+        raise err.ArgumentException(f"Argument UtM is an array of {np.shape(UtM)} dimensions when it should be a matrix.")
+    if len(np.shape(UtU)) != 2:
+        raise err.ArgumentException(f"Argument UtU is an array of {np.shape(UtU)} dimensions when it should be a matrix.")
+    if len(np.shape(in_V)) != 2:
+        raise err.ArgumentException(f"Argument in_V is an array of {np.shape(in_V)} dimensions when it should be a matrix.")
+        
     r, n = np.shape(UtM)
     if not in_V.size:  # checks if V is empty
         V = np.linalg.linalg.solve(UtU, UtM)  # Least squares
@@ -155,7 +162,7 @@ def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01
                     V[k,:] = 1e-16*np.max(V)
 
             elif nonzero:
-                raise ValueError("Column " + str(k) + " of U is zero with nonzero condition")
+                raise err.ZeroColumnWhenUnautorized("Column " + str(k) + " of U is zero with nonzero condition")
 
             if normalize:
                 norm = np.linalg.norm(V[k,:])
