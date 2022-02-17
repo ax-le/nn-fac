@@ -9,6 +9,18 @@ import numpy as np
 import time
 import nn_fac.errors as err
 
+def vector_nnls_solver(y, A, x, maxiter=500, atime=None, alpha=0.5, delta=0.01,
+                       sparsity_coefficient = None, normalize = False, nonzero = False):
+    AtY = A.T@(y.reshape(y.shape[0], 1))
+    AtA = A.T@A
+    X = x.reshape(x.shape[0], 1)
+    
+    X_up, eps, cnt, rho = hals_nnls_acc(AtY, AtA, X, maxiter=maxiter, atime=atime, alpha=alpha, delta=delta,
+                         sparsity_coefficient = normalize, normalize = normalize, nonzero = nonzero)
+    
+    return X_up.reshape(X_up.shape[0])
+    
+
 def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01,
                   sparsity_coefficient = None, normalize = False, nonzero = False):
 ## Author : Axel Marmoret, based on Jeremy Cohen version's of Nicolas Gillis Matlab's code for HALS
