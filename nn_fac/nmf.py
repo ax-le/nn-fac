@@ -435,6 +435,5 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
     elif update_rule == "mu":
         cost = beta_div.beta_divergence(data, np.dot(U,V), beta)
 
-    cost = cost/(norm_data**2)
-
+    #cost = cost/(norm_data**2)
     return U, V, cost
