@@ -40,7 +40,9 @@ def beta_divergence(a, b, beta):
         raise err.InvalidArgumentValue("Invalid value for beta: negative one.") from None
     
     if beta == 1:
-        return np.sum(a * np.log(a/b, where=(a!=0)) - a + b)
+        #return np.sum(a * np.log(a/b, where=(a!=0)) - a + b)
+        a_div_b = np.divide(a,b, where=(b!=0))
+        return np.sum(a * np.log(a_div_b, where=(a_div_b!=0)) - a + b)
     elif beta == 0:
         return np.sum(a/b - np.log(a/b, where=(a!=0)) - 1)
     else:
