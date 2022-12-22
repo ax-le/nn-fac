@@ -12,12 +12,13 @@ import nn_fac.mu as mu
 import nn_fac.beta_divergence as beta_div
 import nn_fac.errors as err
 from nimfa.methods import seeding
+import math
 
 
 def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol=1e-8,
         update_rule = "hals", beta = 2,
         sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
-        verbose=False, return_costs=False):
+        verbose=False, return_costs=False, deterministic=False):
     """
     ======================================
     Nonnegative Matrix Factorization (NMF)
@@ -119,6 +120,11 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
         Indicates whether the algorithm should return all normalized cost function 
         values and computation time of each iteration or not
         Default: False
+    deterministic: boolean
+        Whether or not the NMF should be computed determinstically (True) or not (False).
+        In details, the determinisitc condition covers the initialization 
+        and the acceleration condition which is based on timing (and hence not deteministic).
+        Default: False
 
     Returns
     -------
@@ -167,11 +173,18 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
     """
     if init.lower() == "random":
         k, n = data.shape
-        U_0 = np.random.rand(k, rank)
-        V_0 = np.random.rand(rank, n)
+        if deterministic:
+            seed = np.random.RandomState(82)
+            U_0 = seed.rand(k, rank)
+            V_0 = seed.rand(rank, n)
+        else:
+            U_0 = np.random.rand(k, rank)
+            V_0 = np.random.rand(rank, n)
 
     elif init.lower() == "nndsvd":
         U_0, V_0 = seeding.Nndsvd().initialize(data, rank, {'flag': 0})
+        U_0 = np.array(U_0 + 1e-12)
+        V_0 = np.array(V_0 + 1e-12)
 
     elif init.lower() == "custom":
         if U_0 is None or V_0 is None:
@@ -183,13 +196,13 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
     return compute_nmf(data, rank, U_0, V_0, n_iter_max=n_iter_max, tol=tol,
                        update_rule = update_rule, beta = beta,
                        sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, normalize = normalize,
-                       verbose=verbose, return_costs=return_costs)
+                       verbose=verbose, return_costs=return_costs, deterministic=deterministic)
 
 # Author : Jeremy Cohen, modified by Axel Marmoret
 def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
                 update_rule = "hals", beta = 2,
                 sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
-                verbose=False, return_costs=False):
+                verbose=False, return_costs=False, deterministic=False):
     """
     Computation of a Nonnegative matrix factorization via
     hierarchical alternating least squares (HALS) [1],
@@ -248,6 +261,11 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
         Indicates whether the algorithm should return all normalized cost function 
         values and computation time of each iteration or not
         Default: False
+    deterministic: boolean
+        Whether or not the NMF should be computed determinstically (True) or not (False).
+        In details, the determinisitc condition covers the initialization 
+        and the acceleration condition which is based on timing (and hence not deteministic).
+        Default: False
 
     Returns
     -------
@@ -287,7 +305,7 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
 
         # One pass of least squares on each updated mode
         U, V, cost = one_nmf_step(data, rank, U, V, norm_data, update_rule, beta,
-                                  sparsity_coefficients, fixed_modes, normalize)
+                                  sparsity_coefficients, fixed_modes, normalize, deterministic)
 
         toc.append(time.time() - tic)
 
@@ -318,7 +336,7 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
 
 
 def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
-                 sparsity_coefficients, fixed_modes, normalize):
+                 sparsity_coefficients, fixed_modes, normalize, deterministic):
     """
     One pass of updates for each factor in NMF
     Update the factors by solving a nonnegative least squares problem per mode
@@ -345,25 +363,24 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
         which generalizes the Euclidean norm, and the Kullback-Leibler and 
         Itakura-Saito divergences.
         The chosen beta-divergence is specified with the parameter `beta`.
-        Default: "hals"
     beta: float
         The beta parameter for the beta-divergence.
         2 - Euclidean norm
         1 - Kullback-Leibler divergence
         0 - Itakura-Saito divergence
-        Default: 2
     sparsity_coefficients: List of float (two)
         The sparsity coefficients on U and V respectively.
         If set to None, the algorithm is computed without sparsity
-        Default: [None, None],
     fixed_modes: List of integers (between 0 and 2)
         Has to be set not to update a factor, 0 and 1 for U and V respectively
-        Default: []
     normalize: List of boolean (two)
         A boolean whereas the factors need to be normalized.
         The normalization is a l_2 normalization on each of the rank components
         (columnwise for U, linewise for V)
-        Default: [False, False]
+    deterministic: boolean
+        Whether or not the NMF should be computed determinstically (True) or not (False).
+        In details, the determinisitc condition covers the initialization 
+        and the acceleration condition which is based on timing (and hence not deteministic).
 
     Returns
     -------
@@ -375,7 +392,7 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
     """
     if update_rule not in ["hals", "mu"]:
         raise err.InvalidArgumentValue(f"Invalid update rule: {update_rule}") from None
-    if update_rule == "hals" and beta  != 2:
+    if update_rule == "hals" and beta != 2:
         raise err.InvalidArgumentValue(f"The hals is only valid for the frobenius norm, corresponding to the beta divergence with beta = 2. Here, beta was set to {beta}. To compute NMF with this value of beta, please use the mu update_rule.") from None
 
     if len(sparsity_coefficients) != 2:
@@ -400,7 +417,11 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
             timer = time.time() - tic
     
             # Compute HALS/NNLS resolution
-            U = np.transpose(nnls.hals_nnls_acc(VMt, VVt, np.transpose(U_in), maxiter=100, atime=timer, alpha=0.5, delta=0.01,
+            if deterministic:
+                U = np.transpose(nnls.hals_nnls_acc(VMt, VVt, np.transpose(U_in), maxiter=100, atime=timer, alpha=math.inf, delta=0.01,
+                                                sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False)[0])
+            else:
+                U = np.transpose(nnls.hals_nnls_acc(VMt, VVt, np.transpose(U_in), maxiter=100, atime=timer, alpha=0.5, delta=0.01,
                                                 sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False)[0])
         
         elif update_rule == "mu":
@@ -421,7 +442,11 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
             timer = time.time() - tic
     
             # Compute HALS/NNLS resolution
-            V = nnls.hals_nnls_acc(UtM, UtU, V_in, maxiter=100, atime=timer, alpha=0.5, delta=0.01,
+            if deterministic:
+                V = nnls.hals_nnls_acc(UtM, UtU, V_in, maxiter=100, atime=timer, alpha=math.inf, delta=0.01,
+                                   sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False)[0]
+            else:
+                V = nnls.hals_nnls_acc(UtM, UtU, V_in, maxiter=100, atime=timer, alpha=0.5, delta=0.01,
                                    sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False)[0]
         
         elif update_rule == "mu":
