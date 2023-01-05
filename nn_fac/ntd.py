@@ -20,6 +20,7 @@ import numpy as np
 
 import scipy.sparse as sci_sparse
 
+# %% HALS
 def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_max=100, tol=1e-6,
            sparsity_coefficients = [], fixed_modes = [], normalize = [], mode_core_norm = None,
            verbose=False, return_costs=False, deterministic=False):
@@ -591,7 +592,7 @@ def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
     return core, factors, cost_fct_val #  exhaustive_rec_error
 
 
-
+# %% With MU rules
 ######################### Temporary, to test mu and not break everything (should be merged to ntd in the end, but there is still development on this function)
 def ntd_mu(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_max=1000, tol=1e-6,
            beta = 2, sparsity_coefficients = [], fixed_modes = [], normalize = [], mode_core_norm = None,
