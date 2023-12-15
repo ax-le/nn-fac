@@ -19,7 +19,6 @@ import nn_fac.utils.beta_divergence as beta_div
 import nn_fac.utils.errors as err
 
 import numpy as np
-
 # %% HALS
 def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_max=100, tol=1e-6,
            sparsity_coefficients = [], fixed_modes = [], normalize = [], mode_core_norm = None,

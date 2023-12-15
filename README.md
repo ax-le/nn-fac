@@ -1,3 +1,4 @@
+﻿
 # nn-fac: Nonnegative Factorization techniques toolbox
 Python code for computing some Nonnegative Factorizations, using either an accelerated version of Hierarchical Alternating Least Squares algorithm (HALS) with resolution of Nonnegative Least Squares problem (NNLS) [1] for factorizations subject to the minimization of the Euclidean/Frobenius norm, or the Multiplicative Update [2,3] for factors, by minimizing the $\beta$-divergence [3]..
 
@@ -53,21 +54,31 @@ In the hals condition, this factorization is computed as an ALS algorithm, descr
 
 In the mu condition, this factorization is computed as NMF subproblems (computationally optimized with tensor contractions), described in [3], solved with the Multiplicative Update [3], and using the toolbox Tensorly [7].
 
+## How to cite ##
+
+You should cite the package `nn_fac`, available on HAL (https://hal.archives-ouvertes.fr/hal-02915456).
+
+Here are two styles of citations:
+
+As a bibtex format, this should be cited as: @softwareversion{marmoret2020nn_fac, title={nn\_fac: Nonnegative Factorization techniques toolbox}, author={Marmoret, Axel and Cohen, J{\'e}r{\'e}my}, URL={https://gitlab.inria.fr/amarmore/nonnegative-factorization}, LICENSE = {BSD 3-Clause ''New'' or ''Revised'' License}, year={2020}}
+
+In the IEEE style, this should be cited as: A. Marmoret, and J.E. Cohen, "nn_fac: Nonnegative Factorization techniques toolbox," 2020, url: https://gitlab.inria.fr/amarmore/nonnegative-factorization.
+
 ## References
 [1] N. Gillis and F. Glineur, "Accelerated Multiplicative Updates and Hierarchical ALS Algorithms for Nonnegative Matrix Factorization," Neural Computation 24 (4): 1085-1105, 2012.
 
-[2] D. D. Lee and H. S. Seung, "Learning the parts of objects by non-negative matrix factorization," Nature, vol. 401, no. 6755, p. 788, 1999.
+[2] D.D. Lee and H.S. Seung, "Learning the parts of objects by non-negative matrix factorization," Nature, vol. 401, no. 6755, p. 788, 1999.
 
-[3] Févotte, C., & Idier, J. (2011). Algorithms for nonnegative matrix factorization with the β-divergence. Neural computation, 23(9), 2421-2456.
+[3] C. Févotte, and J. Idier, "Algorithms for nonnegative matrix factorization with the β-divergence", Neural computation, 23(9), pp.2421-2456, 2011.
 
 [4] R. A Harshman et al. "Foundations of the PARAFAC procedure: Models and conditions for an" explanatory" multimodal factor analysis," 1970.
 
-[5] J. E. Cohen, and N. Gillis, "Dictionary-based tensor canonical polyadic decomposition," IEEE Transactions on Signal Processing, 66(7), 1876-1889, 2017.
+[5] J.E. Cohen, and N. Gillis, "Dictionary-based tensor canonical polyadic decomposition," IEEE Transactions on Signal Processing, 66(7), pp.1876-1889, 2017.
 
-[6]  T. G. Kolda, and B. W. Bader, "Tensor decompositions and applications," SIAM review, 51(3), 455-500, 2009.
+[6] T.G. Kolda, and B.W. Bader, "Tensor decompositions and applications," SIAM review, 51(3), 455-500, 2009.
 
 [7] J. Kossaifi, Y. Panagakis, A. Anandkumar and M. Pantic, "TensorLy: Tensor Learning in Python," Journal of Machine Learning Research (JMLR), volume 20, number 26, 2019.
 
-[8] R. A Harshman, "PARAFAC2: Mathematical and technical notes," UCLA working papers in phonetics 22.3044, 1972.
+[8] R.A. Harshman, "PARAFAC2: Mathematical and technical notes," UCLA working papers in phonetics 22.3044, 1972.
 
-[9] J. E Cohen and R. Bro, "Nonnegative PARAFAC2: a flexible coupling approach," International Conference on Latent Variable Analysis and Signal Separation. Springer. 2018.
+[9] J.E. Cohen and R. Bro, "Nonnegative PARAFAC2: a flexible coupling approach," International Conference on Latent Variable Analysis and Signal Separation. Springer. 2018.
