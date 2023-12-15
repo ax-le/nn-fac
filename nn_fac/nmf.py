@@ -7,10 +7,10 @@ Created on Tue Jun 11 15:49:25 2019
 
 import numpy as np
 import time
-import nn_fac.nnls as nnls
-import nn_fac.mu as mu
-import nn_fac.beta_divergence as beta_div
-import nn_fac.errors as err
+import nn_fac.update_rules.nnls as nnls
+import nn_fac.update_rules.mu as mu
+import nn_fac.utils.beta_divergence as beta_div
+import nn_fac.utils.errors as err
 from nimfa.methods import seeding
 import math
 
@@ -425,7 +425,7 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
                                                 sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False)[0])
         
         elif update_rule == "mu":
-            U = mu.mu_betadivmin(U, V, data, beta)
+            U = mu.switch_alternate_mu(data, U, V, beta, "U") #mu.mu_betadivmin(U, V, data, beta)
 
     if 1 not in fixed_modes:
         # V update
@@ -450,7 +450,7 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
                                    sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False)[0]
         
         elif update_rule == "mu":
-            V = np.transpose(mu.mu_betadivmin(V.T, U.T, data.T, beta))
+            V = mu.switch_alternate_mu(data, U, V, beta, "V") # np.transpose(mu.mu_betadivmin(V.T, U.T, data.T, beta))
 
     sparsity_coefficients = np.where(np.array(sparsity_coefficients) == None, 0, sparsity_coefficients)
     
@@ -462,3 +462,22 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
 
     #cost = cost/(norm_data**2)
     return U, V, cost
+
+if __name__ == "__main__":
+    np.random.seed(42)
+    m, n, rank = 100, 200, 5
+    W_0, H_0 = np.random.rand(m, rank), np.random.rand(rank, n) # Example input matrices
+    data = W_0@H_0 + 1e-2*np.random.rand(m,n)  # Example input matrix
+    
+    W, H = nmf(data, rank, beta = 2, update_rule = "hals", n_iter_max = 100, init="random", verbose = True)
+    W, H = nmf(data, rank, beta = 2, update_rule = "hals", n_iter_max = 100, init = "nndsvd",verbose = True)
+
+    W, H = nmf(data, rank, beta = 1, update_rule = "mu", n_iter_max = 100, init="random", verbose = True)
+    W, H = nmf(data, rank, beta = 1, update_rule = "mu", n_iter_max = 100, init = "nndsvd",verbose = True)
+
+    W, H = nmf(data, rank, beta = 0, update_rule = "mu", n_iter_max = 100, init="random", verbose = True)
+    W, H = nmf(data, rank, beta = 0, update_rule = "mu", n_iter_max = 100, init = "nndsvd",verbose = True)
+
+    # TO DEBUG
+    # W, H, lossfun, t = minvol_beta_nmf(data, rank, beta = 1, n_iter_max = 100, init = "nndsvd", gamma_line_search = True, gamma = 1, verbose = True)
+    # W, H, lossfun, t = minvol_beta_nmf(data, rank, beta = 1, n_iter_max = 100, i gamma_line_search = False, verbose = True)

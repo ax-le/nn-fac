@@ -7,13 +7,16 @@ Created on Tue Jun 11 16:52:21 2019
 
 import numpy as np
 import time
-import nn_fac.nnls as nnls
-import nn_fac.errors as err
-import nn_fac.mu as mu
-import nn_fac.beta_divergence as beta_div
-
 import tensorly as tl
 from nimfa.methods import seeding
+
+import nn_fac.update_rules.nnls as nnls
+import nn_fac.update_rules.mu as mu
+
+import nn_fac.utils.beta_divergence as beta_div
+import nn_fac.utils.errors as err
+
+
 
 
 def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,

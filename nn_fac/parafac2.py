@@ -7,7 +7,7 @@ Created on Tue Jun 11 17:12:33 2019
 
 import numpy as np
 import time
-import nn_fac.nnls as nnls
+import nn_fac.update_rules.nnls as nnls
 import tensorly as tl
 from nimfa.methods import seeding
 
