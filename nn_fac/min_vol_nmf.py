@@ -1,4 +1,4 @@
-##### CONSTRAINED NMF
+##### MINIMUM-VOLUME NMF
 ## Will be integrated into nmf.py when stable.
 import numpy as np
 import time

@@ -1,4 +1,6 @@
 import numpy as np
+import warnings
+from nn_fac.utils.beta_divergence import gamma_beta
 eps = 1e-8 #np.finfo(float).eps
 
 def normalize_WH(W, H, matrix):
@@ -18,6 +20,43 @@ def normalize_WH(W, H, matrix):
         raise ValueError(f"Matrix must be either 'W' or 'H', but it is {matrix}")
 
     return W, H
+
+def update_lagragian_multipliers_simplex_projection(C, D, H, beta, lagrangian_multipliers_0, tol = 1e-6, n_iter_max = 100):
+    # Comes from 
+    k,n = H.shape
+    Jk1 = np.ones((k,1))
+    Jn1 = np.ones(n)
+    ONES = np.ones((k, n))
+    lagrangian_multipliers = lagrangian_multipliers_0.copy()
+
+    for iter in range(n_iter_max):
+        lagrangian_multipliers_prev = lagrangian_multipliers.copy()
+        if beta == 1:
+            Mat = H * ((C / ((D - Jk1 @ lagrangian_multipliers.T) + eps)))
+            Matp = H * (C / ((D - Jk1 @ lagrangian_multipliers.T) ** 2))
+        elif beta == 2:
+            Mat = H * ((C / ((D - Jk1 @ lagrangian_multipliers.T) + eps))**2)
+            Matp = H * (C / ((D - Jk1 @ lagrangian_multipliers.T) + eps)) 
+            Matp = Matp * (C / ((D - Jk1 @ lagrangian_multipliers.T) ** 2))
+        else:
+            Mat = H * ((C / ((D - Jk1 @ lagrangian_multipliers.T) + eps))**gamma_beta(beta))
+            Matp = H * ((C / ((D - Jk1 @ lagrangian_multipliers.T) + eps))**gamma_beta(beta - 1)) 
+            Matp = Matp * (C / ((D - Jk1 @ lagrangian_multipliers.T) ** 2))
+
+        xi = np.sum(Mat, axis=0)
+        xi = xi - Jn1
+        xip = np.sum(Matp, axis=0)
+
+        lagrangian_multipliers = lagrangian_multipliers - (xi / (xip+eps)).reshape((n,1))
+
+        if np.max(np.abs(lagrangian_multipliers - lagrangian_multipliers_prev)) <= tol:
+            break
+
+        if iter == n_iter_max - 1:
+            warnings.warn('Maximum of iterations reached in the update of the Lagrangian multipliers.')
+
+    return lagrangian_multipliers
+
 
 # %% Test projection simplex (but doesn't work)
 def normalize_W_and_H(W, H, iter):

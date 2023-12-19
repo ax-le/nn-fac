@@ -50,3 +50,31 @@ def beta_divergence(a, b, beta):
         return np.sum(a/b - np.log(a/b, where=(a!=0)) - 1)
     else:
         return np.sum(1/(beta*(beta -1)) * (a**beta + (beta - 1) * b**beta - beta * a * (b**(beta-1))))
+    
+def gamma_beta(beta):
+    """
+    Exponent of Fevotte and Idier [1], which guarantees the MU updates decrease the cost.
+    
+    See [1] for details.
+    
+    Parameters
+    ----------
+    beta : Nonnegative float
+        The beta coefficient for the beta-divergence.
+
+    Returns
+    -------
+    int : the exponent value
+    
+    References
+    ----------
+    [1]  C. Févotte and J. Idier, Algorithms for nonnegative matrix
+    factorization with the beta-divergence, Neural Computation,
+    vol. 23, no. 9, pp. 2421–2456, 2011.
+    """
+    if beta<1:
+        return 1/(2-beta)
+    if beta>2:
+        return  1/(beta-1)
+    else:
+        return 1

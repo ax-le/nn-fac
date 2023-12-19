@@ -12,6 +12,10 @@ import numpy as np
 import time
 import tensorly as tl
 import nn_fac.utils.errors as err
+from nn_fac.utils.beta_divergence import gamma_beta
+import nn_fac.utils.normalize_wh as normalize_wh
+
+epsilon = 1e-12
 
 def switch_alternate_mu(data, U, V, beta, matrix):
     """
@@ -75,8 +79,6 @@ def mu_betadivmin(U, V, M, beta):
     if beta < 0:
         raise err.InvalidArgumentValue("Invalid value for beta: negative one.") from None
 
-    epsilon = 1e-12
-
     K = np.dot(U,V)
 
     if beta == 1:
@@ -89,10 +91,10 @@ def mu_betadivmin(U, V, M, beta):
         return np.maximum(U * (np.dot(M,V.T) / denom), epsilon)
     elif beta == 3:
         denom = np.dot(K**2,V.T)
-        return np.maximum(U * (np.dot((K * M),V.T) / denom) ** gamma(beta), epsilon)
+        return np.maximum(U * (np.dot((K * M),V.T) / denom) ** gamma_beta(beta), epsilon)
     else:
         denom = np.dot(K**(beta-1),V.T)
-        return np.maximum(U * (np.dot((K**(beta-2) * M),V.T) / denom) ** gamma(beta), epsilon)
+        return np.maximum(U * (np.dot((K**(beta-2) * M),V.T) / denom) ** gamma_beta(beta), epsilon)
 
 def mu_tensorial(G, factors, tensor, beta):
     """
@@ -136,7 +138,6 @@ def mu_tensorial(G, factors, tensor, beta):
     if beta < 0:
         raise err.InvalidArgumentValue("Invalid value for beta: negative one.") from None
 
-    epsilon = 1e-12
     K = tl.tenalg.multi_mode_dot(G,factors)
 
     if beta == 1:
@@ -155,32 +156,20 @@ def mu_tensorial(G, factors, tensor, beta):
         L1 = K**(beta-1)
         L2 = K**(beta-2) * tensor
 
-    return np.maximum(G * (tl.tenalg.multi_mode_dot(L2, [fac.T for fac in factors]) / tl.tenalg.multi_mode_dot(L1, [fac.T for fac in factors])) ** gamma(beta) , epsilon)
+    return np.maximum(G * (tl.tenalg.multi_mode_dot(L2, [fac.T for fac in factors]) / tl.tenalg.multi_mode_dot(L1, [fac.T for fac in factors])) ** gamma_beta(beta) , epsilon)
 
-def gamma(beta):
-    """
-    Exponent of Fevotte and Idier [1], which guarantees the MU updates decrease the cost.
-    
-    See [1] for details.
-    
-    Parameters
-    ----------
-    beta : Nonnegative float
-        The beta coefficient for the beta-divergence.
+def simplex_proj_mu(data, W, H, beta, tol_update_lagrangian = 1e-6):
+    # Projects H on the unit simplex, comes from 'Leplat, V., Gillis, N., & Idier, J. (2021). Multiplicative updates for NMF with β-divergences under disjoint equality constraints. SIAM Journal on Matrix Analysis and Applications, 42(2), 730-752. arXiv:2010.16223.'
+    k,n = H.shape
+    Jk1 = np.ones((k, 1))
+    C=(W.T@(((W@H)**(beta-2)) * data))
+    D=W.T@((W@H)**(beta-1))
 
-    Returns
-    -------
-    int : the exponent value
+    lagrangian_multipliers_0 = ((D[0,:] - (C[0,:] * H[0,:]))**(gamma_beta(beta))).T # np.zeros((n, 1))
+    lagrangian_multipliers_0 = lagrangian_multipliers_0.reshape((n,1))
+    lagrangian_multipliers = normalize_wh.update_lagragian_multipliers_simplex_projection(C, D, H, beta, lagrangian_multipliers_0, tol = tol_update_lagrangian, n_iter_max = 100)
     
-    References
-    ----------
-    [1]  C. Févotte and J. Idier, Algorithms for nonnegative matrix
-    factorization with the beta-divergence, Neural Computation,
-    vol. 23, no. 9, pp. 2421–2456, 2011.
-    """
-    if beta<1:
-        return 1/(2-beta)
-    if beta>2:
-        return  1/(beta-1)
-    else:
-        return 1
+    H = H * (C/((D-Jk1@lagrangian_multipliers.T)+epsilon))**(gamma_beta(beta))
+    H = np.maximum(H,epsilon)
+
+    return H
