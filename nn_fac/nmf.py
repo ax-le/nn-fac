@@ -477,7 +477,3 @@ if __name__ == "__main__":
 
     W, H = nmf(data, rank, beta = 0, update_rule = "mu", n_iter_max = 100, init="random", verbose = True)
     W, H = nmf(data, rank, beta = 0, update_rule = "mu", n_iter_max = 100, init = "nndsvd",verbose = True)
-
-    # TO DEBUG
-    # W, H, lossfun, t = minvol_beta_nmf(data, rank, beta = 1, n_iter_max = 100, init = "nndsvd", gamma_line_search = True, gamma = 1, verbose = True)
-    # W, H, lossfun, t = minvol_beta_nmf(data, rank, beta = 1, n_iter_max = 100, i gamma_line_search = False, verbose = True)
