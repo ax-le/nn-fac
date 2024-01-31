@@ -10,7 +10,7 @@ import nn_fac.multilayer_nmf as multi_nmf
 import nn_fac.utils.beta_divergence as beta_div
 from nn_fac.utils.normalize_wh import normalize_WH
 
-def deep_KL_NMF(data, all_ranks, n_iter_max_each_nmf = 100, n_iter_max_deep_loop = 100, init = "multilayer_nmf", init_multi_layer = "random", W_0 = None, H_0 = None, delta = 1e-6, tol = 1e-6, verbose = False):
+def deep_KL_NMF(data, all_ranks, n_iter_max_each_nmf = 100, n_iter_max_deep_loop = 100, init = "multilayer_nmf", init_multi_layer = "random", W_0 = None, H_0 = None, delta = 1e-6, tol = 1e-6, return_errors = False, verbose = False):
     L = len(all_ranks)
 
     assert L > 1, "The number of layers must be at least 2. Otherwise, ou should just use NMF."
@@ -23,7 +23,7 @@ def deep_KL_NMF(data, all_ranks, n_iter_max_each_nmf = 100, n_iter_max_deep_loop
         #warnings.warn("Warning: The ranks of deep NMF should be decreasing.")
 
     if init == "multilayer_nmf":
-        W, H, e = multi_nmf.multilayer_beta_NMF(data, all_ranks, n_iter_max_each_nmf = n_iter_max_each_nmf, init_each_nmf = init_multi_layer, delta = delta, verbose = False)
+        W, H, e = multi_nmf.multilayer_beta_NMF(data, all_ranks, n_iter_max_each_nmf = n_iter_max_each_nmf, init_each_nmf = init_multi_layer, delta = delta, return_errors = True, verbose = False)
         all_errors[0] = e
 
     elif init == "custom":
@@ -60,11 +60,14 @@ def deep_KL_NMF(data, all_ranks, n_iter_max_each_nmf = 100, n_iter_max_deep_loop
             if verbose:
                 print(f'Converged in {deep_iteration} iterations.')
             break
-
-
-    return W, H, all_errors, toc
+    
+    if return_errors:
+        return W, H, all_errors, toc
+    else:
+        return W, H
 
 def one_step_deep_KL_nmf(data, W, H, all_ranks, lambda_, delta):
+    # delta is useless here, because we use our own beta_nmf.
     L = len(all_ranks)
     errors = []
 
