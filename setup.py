@@ -5,13 +5,13 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="nn_fac",
-    version="0.2.1",
+    version="0.3.1",
     author="Marmoret Axel",
     author_email="axel.marmoret@irisa.fr",
     description="Nonnegative factorization toolbox.",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://gitlab.inria.fr/amarmore/nonnegative-factorization",    
+    url="https://gitlab.imt-atlantique.fr/a23marmo/nonnegative-factorization/",    
     packages=setuptools.find_packages(),
     classifiers=[
         "License :: OSI Approved :: BSD License",
@@ -28,7 +28,7 @@ setuptools.setup(
         'nimfa',
         'numpy >= 1.18.0',
         'scipy >= 0.13.0',
-        'tensorly >= 0.4.5',
+        'tensorly == 0.6.0',
     ],
     python_requires='>=3.7',
 

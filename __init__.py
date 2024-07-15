@@ -6,7 +6,6 @@ from . import parafac2
 from . import simplex_nmf
 from . import min_vol_nmf
 
-
 from . import multilayer_nmf
 from . import deep_nmf
 
