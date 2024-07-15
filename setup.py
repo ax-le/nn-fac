@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="nn_fac",
-    version="0.3.1",
+    version="0.3.2",
     author="Marmoret Axel",
     author_email="axel.marmoret@irisa.fr",
     description="Nonnegative factorization toolbox.",
