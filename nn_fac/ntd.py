@@ -136,7 +136,7 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
     -------
     tensor = np.random.rand(80,100,120)
     ranks = [10,20,15]
-    core, factors = NTD.ntd(tensor, ranks = ranks, init = "tucker", verbose = True, hals = False,
+    core, factors = NTD.ntd(tensor, ranks = ranks, init = "tucker", verbose = True,
                             sparsity_coefficients = [None, None, None, None], normalize = [True, True, False, True])
 
     References
