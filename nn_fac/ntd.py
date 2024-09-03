@@ -3,6 +3,10 @@
 Created on Tue Jun 11 16:52:21 2019
 
 @author: amarmore
+
+# TODO: An error is raised with numpy versions higher that 1.24. It is probably due to the following modification in numpy:
+# "Ragged array creation will now always raise a ValueError unless dtype=object is passed. This includes very deeply nested sequences." (https://numpy.org/devdocs/release/1.24.0-notes.html)
+# To debug.
 """
 
 import numpy as np

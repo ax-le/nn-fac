@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="nn_fac",
-    version="0.3.2",
+    version="0.3.3",
     author="Marmoret Axel",
     author_email="axel.marmoret@irisa.fr",
     description="Nonnegative factorization toolbox.",
@@ -26,10 +26,9 @@ setuptools.setup(
     license='BSD',
     install_requires=[
         'nimfa',
-        'numpy >= 1.18.0',
+        'numpy >= 1.18.0, <1.24', # Starting from version 1.24, the NTD algorithm (and potentially the others) does not work anymore. Realted to issue #1 https://github.com/ax-le/nn-fac/issues/1. Should be fixed in the future.
         'scipy >= 0.13.0',
         'tensorly == 0.6.0',
     ],
     python_requires='>=3.7',
-
 )
