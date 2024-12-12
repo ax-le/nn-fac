@@ -495,7 +495,10 @@ def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
         temp = tl.tenalg.multi_mode_dot(core, elemprod, skip=mode)
         # this line can be computed with tensor contractions
         con_modes = [i for i in range(tl.ndim(tensor)) if i != mode]
-        UtU = tl.tenalg.contract(temp, con_modes, core, con_modes)
+
+        # Depending on the version of tensorly, use different version of the API
+        UtU = tl.tenalg.contract(temp, con_modes, core, con_modes) # Tensorly v0.6.0
+        # UtU = tl.tenalg.tensordot(temp, core, con_modes) # Replacing contraction because they had been removed in Tensorly v0.9.0
         #UtU = unfold(temp, mode)@tl.transpose(unfold(core, mode))
 
         # UtM
@@ -503,7 +506,10 @@ def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
         temp = tl.tenalg.multi_mode_dot(tensor, factors, skip=mode, transpose = True)
         # again, computable by tensor contractions
         #MtU = unfold(temp, mode)@tl.transpose(unfold(core, mode))
-        MtU = tl.tenalg.contract(temp, con_modes, core, con_modes)
+
+        # Depedning on the version of tensorly, use different version of the API
+        MtU = tl.tenalg.contract(temp, con_modes, core, con_modes) # Tensorly v0.6.0
+        # MtU = tl.tenalg.tensordot(temp, core, con_modes) # Replacing contraction because they had been removed in Tensorly v0.9.0
         UtM = tl.transpose(MtU)
 
 
@@ -529,7 +535,7 @@ def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
     # better implementation: reuse the computation of temp !
     # Also reuse elemprod form last update
     all_MtX = tl.tenalg.mode_dot(temp, tl.transpose(factors[modes_list[-1]]), modes_list[-1])
-    all_MtM = tl.copy(elemprod)
+    all_MtM = elemprod.copy()
     all_MtM[modes_list[-1]] = factors[modes_list[-1]].T@factors[modes_list[-1]]
 
     #all_MtM = np.array([fac.T@fac for fac in factors])

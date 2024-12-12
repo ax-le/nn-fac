@@ -26,7 +26,7 @@ setuptools.setup(
     license='BSD',
     install_requires=[
         'nimfa',
-        'numpy >= 1.18.0, <1.24', # Starting from version 1.24, the NTD algorithm (and potentially the others) does not work anymore. Realted to issue #1 https://github.com/ax-le/nn-fac/issues/1. Should be fixed in the future.
+        'numpy >= 1.18.0', # Starting from version 1.24, the NTD algorithm (and potentially the others) does not work anymore. Realted to issue #1 https://github.com/ax-le/nn-fac/issues/1. Should be fixed in the future.
         'scipy >= 0.13.0',
         'tensorly == 0.6.0',
     ],
