@@ -7,13 +7,15 @@ Created on Tue Jun 11 15:49:25 2019
 
 import numpy as np
 import time
+import math
+import warnings
+
 import nn_fac.update_rules.nnls as nnls
 import nn_fac.update_rules.mu as mu
 import nn_fac.utils.beta_divergence as beta_div
 import nn_fac.utils.errors as err
-from nimfa.methods import seeding
-import math
 
+from nimfa.methods import seeding
 
 def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol=1e-8,
         update_rule = "hals", beta = 2,
@@ -171,6 +173,11 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
     Learning the parts of objects by non-negative matrix factorization.
     Nature, 401(6755), 788-791.
     """
+    if min(data.shape) < rank:
+        min_data = min(data.shape)
+        rank = min_data
+        warnings.warn(f"The rank is too high for the input matrix. It was set to {min_data} instead.")
+
     if init.lower() == "random":
         k, n = data.shape
         if deterministic:
@@ -182,7 +189,9 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
             V_0 = np.random.rand(rank, n)
 
     elif init.lower() == "nndsvd":
-        U_0, V_0 = seeding.Nndsvd().initialize(data, rank, {'flag': 0})
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore") # A warning arises from the nimfa toolbox, because of the sue of np.asmatrix.
+            U_0, V_0 = seeding.Nndsvd().initialize(data, rank, {'flag': 0})
         U_0 = np.array(U_0 + 1e-12)
         V_0 = np.array(V_0 + 1e-12)
 

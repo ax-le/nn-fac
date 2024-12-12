@@ -5,6 +5,7 @@ Created on Tue Jun 11 17:12:33 2019
 @author: amarmore
 """
 
+import warnings
 import numpy as np
 import time
 import nn_fac.update_rules.nnls as nnls
@@ -194,7 +195,9 @@ def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = Non
 
     elif init.lower() == "nndsvd":
         for k in range(nb_channel):
-            W_k, H = seeding.Nndsvd().initialize(tensor_slices[k], rank, {'flag': 0})
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore") # A warning arises from the nimfa toolbox, because of the sue of np.asmatrix.
+                W_k, H = seeding.Nndsvd().initialize(tensor_slices[k], rank, {'flag': 0})
             W_list.append(W_k)
             D_list.append(np.diag(np.random.rand(rank)))
         D_list = np.array(D_list)

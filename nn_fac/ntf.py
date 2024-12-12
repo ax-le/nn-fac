@@ -8,6 +8,8 @@ Created on Tue Jun 11 16:52:21 2019
 import numpy as np
 import time
 import tensorly as tl
+import warnings
+
 from nimfa.methods import seeding
 
 import nn_fac.update_rules.nnls as nnls
@@ -193,7 +195,9 @@ def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
             if tensor.shape[mode] < rank:
                 current_factor = np.random.rand(tensor.shape[mode], rank)
             else:
-                current_factor, useless_variable = seeding.Nndsvd().initialize(tl.unfold(tensor, mode), rank, {'flag': 0})
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore") # A warning arises from the nimfa toolbox, because of the sue of np.asmatrix.
+                    current_factor, useless_variable = seeding.Nndsvd().initialize(tl.unfold(tensor, mode), rank, {'flag': 0})
             factors.append(tl.tensor(current_factor))
 
     elif init.lower() == "custom":
