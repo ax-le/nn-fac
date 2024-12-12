@@ -9,8 +9,8 @@ Created on Tue Feb 25 13:47:27 2020
 import unittest
 import random
 import numpy as np
-import nn_fac.nnls as nnls
-import nn_fac.errors as err
+import nn_fac.update_rules.nnls as nnls
+import nn_fac.utils.errors as err
 
 class NnlsTests(unittest.TestCase):
 
