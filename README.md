@@ -22,15 +22,6 @@ For example, if you want to use nmf, type:
 
 Don't hesitate to reach the author in case of problem. Comments are welcomed!
 
-### Note on Python and Numpy versions
-As of now, algorithms do not work with numpy versions higher than 1.24. This is an issue open on git (https://github.com/ax-le/nn-fac/issues/1), and should be fixed in the future.
-
-For now, we only can ensure that the algorithms work with numpy version 1.23.5. Sorry for the incovenience.
-
-Consequently, numpy 1.23.5 is only set to work with python <= 3.11. We recommand using python 3.10.4, as we ensure that the code will work with that version.
-
-Sorry for the incovenience!
-
 ## Contents
 ### NNLS
 This toolbox contains a NNLS resolution algorithm, developed as described in [1]. This code is based on COHEN Jeremy python code adaptation of GILLIS Nicolas MatLab code.
