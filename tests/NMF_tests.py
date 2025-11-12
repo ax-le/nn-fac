@@ -11,6 +11,7 @@ import random
 import numpy as np
 from nn_fac.nmf import nmf
 import nn_fac.utils.errors as err
+import nn_fac.utils.initialize_factors as init_factors
 
 class NMFTests(unittest.TestCase):
 
@@ -28,6 +29,38 @@ class NMFTests(unittest.TestCase):
         self.V_0 = np.random.rand(self.random_rank, self.random_shape[1])
         self.data_init = self.U_0@self.V_0 + 1e-2 * np.random.rand(self.random_shape[0], self.random_shape[1])
 
+    # %% Testing initializations
+    def test_init_nndsvd(self):
+        U, V = init_factors.nmf_initialization(self.data_init, self.random_rank, init_type="nndsvd", deterministic=True)
+        self.assertAlmostEqual(U[0][0], 1.4604530858567824)
+        self.assertAlmostEqual(V[0][0], 1.3118383377996725)
+
+    def test_init_random(self):
+        U, V = init_factors.nmf_initialization(self.data_init, self.random_rank, init_type="random", deterministic=True, seed=0)
+        self.assertAlmostEqual(U[0][0], 0.5488135)
+        self.assertAlmostEqual(V[0][0], 1.15834001e-01)
+
+    def test_init_fails(self):
+        # Testing invalid initializations
+        with self.assertRaises(err.InvalidInitializationType):
+            U, V = nmf(self.data_init, self.random_rank, init = "invalid_init", U_0 = None, V_0 = None, n_iter_max=2, tol=1e-8,
+                                        update_rule = "hals", beta = 2,
+                                        sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
+                                        verbose=False, return_costs=True, deterministic=True)
+        with self.assertRaises(err.CustomNotValidFactors):
+            U, V = nmf(self.data_init, self.random_rank, init = "custom", U_0 = None, V_0 = self.V_0, n_iter_max=2, tol=1e-8,
+                                        update_rule = "hals", beta = 2,
+                                        sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
+                                        verbose=False, return_costs=True, deterministic=True)
+        
+        # Testing valid custom initialization
+        random_U, random_V = np.random.rand(self.random_shape[0], self.random_rank), np.random.rand(self.random_rank, self.random_shape[1])
+        U, V, cost_fct_vals, toc = nmf(self.data_init, self.random_rank, init = "custom", U_0 = random_U, V_0 = random_V, n_iter_max=2, tol=1e-8,
+                                        update_rule = "hals", beta = 2,
+                                        sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
+                                        verbose=False, return_costs=True, deterministic=True)
+
+
     # %% Testing a decomposition
     def test_decomposition_hals(self):
 
@@ -37,15 +70,15 @@ class NMFTests(unittest.TestCase):
         U, V, cost_fct_vals, toc = nmf(self.data_init, self.random_rank, init = "random", U_0 = None, V_0 = None, n_iter_max=10, tol=1e-8,
                                         update_rule = "hals", beta = 2,
                                         sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
-                                        verbose=False, return_costs=True, deterministic=True)
+                                        verbose=False, return_costs=True, deterministic=True, seed=0)
         
         # Checking factors
-        self.assertAlmostEqual(U[0][0], 0.36681975980591014)
-        self.assertAlmostEqual(V[0][0], 1.3067452788067433)
+        self.assertAlmostEqual(U[0][0], 0.55430769)
+        self.assertAlmostEqual(V[0][0], 0.11523809)
         
         # Checking errors
-        self.assertAlmostEqual(cost_fct_vals[0], 66.88690297118416)
-        self.assertAlmostEqual(cost_fct_vals[-1], 1.3318257972164844)
+        self.assertAlmostEqual(cost_fct_vals[0], 0.009438764349822035)
+        self.assertAlmostEqual(cost_fct_vals[-1], 0.008805158842036184)
 
     def test_decomposition_mu_beta2(self):
 
@@ -55,7 +88,7 @@ class NMFTests(unittest.TestCase):
         U, V, cost_fct_vals, toc = nmf(self.data_init, self.random_rank, init = "random", U_0 = None, V_0 = None, n_iter_max=10, tol=1e-8,
                                         update_rule = "mu", beta = 2,
                                         sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
-                                        verbose=False, return_costs=True, deterministic=True)
+                                        verbose=False, return_costs=True, deterministic=True, seed=82)
         
         # Checking factors
         self.assertAlmostEqual(U[0][0], 0.35280947364767296)
@@ -73,7 +106,7 @@ class NMFTests(unittest.TestCase):
         U, V, cost_fct_vals, toc = nmf(self.data_init, self.random_rank, init = "random", U_0 = None, V_0 = None, n_iter_max=10, tol=1e-8,
                                         update_rule = "mu", beta = 1,
                                         sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
-                                        verbose=False, return_costs=True, deterministic=True)
+                                        verbose=False, return_costs=True, deterministic=True, seed=82)
         
         # Checking factors
         self.assertAlmostEqual(U[0][0], 0.3718053134990678)
@@ -91,7 +124,7 @@ class NMFTests(unittest.TestCase):
         U, V, cost_fct_vals, toc = nmf(self.data_init, self.random_rank, init = "random", U_0 = None, V_0 = None, n_iter_max=10, tol=1e-8,
                                         update_rule = "mu", beta = 0,
                                         sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
-                                        verbose=False, return_costs=True, deterministic=True)
+                                        verbose=False, return_costs=True, deterministic=True, seed=82)
         
         # Checking factors
         self.assertAlmostEqual(U[0][0], 0.32746152037135323)

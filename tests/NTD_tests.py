@@ -135,81 +135,124 @@ class NTDTests(unittest.TestCase):
     # #                                             init = "random", deterministic = False))
 
     # %% Test of NTD on one particular test
-    def test_decomposition_hals(self):
+    def test_decomposition_hals_random_init(self):
 
         # If this fails, determinism has failed. Hence, the rest of the test is bound to fail.
         self.assertAlmostEqual(self.random_tucker[0][0][0], 21.974433828159626)
 
         core, factors, cost_fct_vals, toc = ntd(self.random_tucker, self.random_ranks, init = "random", n_iter_max = 10, tol = 1e-8,
-                                                    deterministic = True,sparsity_coefficients = [None, None, None, None], fixed_modes = [], normalize = [False, False, False, False],
-                                                    verbose = False, return_costs = True)
+                                                    sparsity_coefficients = [None, None, None, None], fixed_modes = [], normalize = [False, False, False, False],
+                                                    verbose = False, return_costs = True, deterministic = True, seed=0)
         
         # Checking factors
-        self.assertAlmostEqual(factors[0][0][0], 0.15008560444598218)
-        self.assertAlmostEqual(factors[1][0][0], 0.5932534337969397)
-        self.assertAlmostEqual(factors[2][0][0], 0.5827772361357559)
-        self.assertAlmostEqual(core[0,0,0], 0.644143536068335)
+        self.assertAlmostEqual(factors[0][0][0], 0.5501411956914489)
+        self.assertAlmostEqual(factors[1][0][0], 0.9680069293664532)
+        self.assertAlmostEqual(factors[2][0][0], 0.965086018254149)
+        self.assertAlmostEqual(core[0,0,0], 0.3744157888431357)
         
         # Checking errors
-        self.assertAlmostEqual(cost_fct_vals[0], 0.0009901099693517598)
-        self.assertAlmostEqual(cost_fct_vals[-1], 0.00012342263436269062)
+        self.assertAlmostEqual(cost_fct_vals[0], 2.6164388105612055e-08)
+        self.assertAlmostEqual(cost_fct_vals[-1], 2.603936417799217e-08)
 
-    def test_decomposition_mu_beta2(self):
+    def test_decomposition_hals_tucker_init(self):
 
         # If this fails, determinism has failed. Hence, the rest of the test is bound to fail.
         self.assertAlmostEqual(self.random_tucker[0][0][0], 21.974433828159626)
 
-        core, factors, cost_fct_vals, toc = ntd_mu(self.random_tucker, self.random_ranks, init = "random", n_iter_max = 10, tol = 1e-8, beta = 2,
-                                                    deterministic = True,sparsity_coefficients = [None, None, None, None], fixed_modes = [], normalize = [False, False, False, False],
-                                                    verbose = False, return_costs = True)
+        core, factors, cost_fct_vals, toc = ntd(self.random_tucker, self.random_ranks, init = "tucker", n_iter_max = 10, tol = 1e-8,
+                                                update_rule="hals",
+                                                    sparsity_coefficients = [None, None, None, None], fixed_modes = [], normalize = [False, False, False, False],
+                                                    verbose = False, return_costs = True, deterministic = True, seed=0)
         
-        # Checking factors
-        self.assertAlmostEqual(factors[0][0][0], 0.4918486535796236)
-        self.assertAlmostEqual(factors[1][0][0], 0.7948442026225503)
-        self.assertAlmostEqual(factors[2][0][0], 0.5126011046374159)
-        self.assertAlmostEqual(core[0,0,0], 0.6401491933742705)
+         # Checking factors
+        self.assertAlmostEqual(factors[0][0][0], 0.16504481330298995)
+        self.assertAlmostEqual(factors[1][0][0], 0.09847086272185894)
+        self.assertAlmostEqual(factors[2][0][0], 0.11680262111792158)
+        self.assertAlmostEqual(core[0,0,0], 11039.862648258559)
         
         # Checking errors
-        self.assertAlmostEqual(cost_fct_vals[0], 45250.45478060806)
-        self.assertAlmostEqual(cost_fct_vals[-1], 42246.166217618826)
+        self.assertAlmostEqual(cost_fct_vals[0], 0.00027083233922590056)
+        self.assertAlmostEqual(cost_fct_vals[-1], 0.00010638116104305596)
 
-    def test_decomposition_mu_beta1(self):
+    def test_decomposition_mu_beta2_random_init(self):
 
         # If this fails, determinism has failed. Hence, the rest of the test is bound to fail.
         self.assertAlmostEqual(self.random_tucker[0][0][0], 21.974433828159626)
 
-        core, factors, cost_fct_vals, toc = ntd_mu(self.random_tucker, self.random_ranks, init = "random", n_iter_max = 10, tol = 1e-8, beta = 1,
-                                                    deterministic = True,sparsity_coefficients = [None, None, None, None], fixed_modes = [], normalize = [False, False, False, False],
-                                                    verbose = False, return_costs = True)
+        core, factors, cost_fct_vals, toc = ntd(self.random_tucker, self.random_ranks, init = "random", n_iter_max = 10, tol = 1e-8,
+                                                update_rule="mu", beta = 2,
+                                                    sparsity_coefficients = [None, None, None, None], fixed_modes = [], normalize = [False, False, False, False],
+                                                    verbose = False, return_costs = True, deterministic = True, seed=0)
         
         # Checking factors
-        self.assertAlmostEqual(factors[0][0][0], 0.5590567522139028)
-        self.assertAlmostEqual(factors[1][0][0], 0.7579973274629266)
-        self.assertAlmostEqual(factors[2][0][0], 0.4717461273286412)
-        self.assertAlmostEqual(core[0,0,0], 0.6397194128224372)
+        self.assertAlmostEqual(factors[0][0][0], 0.5489250094099122)
+        self.assertAlmostEqual(factors[1][0][0], 0.9679994929177957)
+        self.assertAlmostEqual(factors[2][0][0], 0.9650887516147171)
+        self.assertAlmostEqual(core[0,0,0], 0.3744138868288453)
         
         # Checking errors
-        self.assertAlmostEqual(cost_fct_vals[0], 2636.709914183355)
-        self.assertAlmostEqual(cost_fct_vals[-1], 2474.7683618573797)
+        self.assertAlmostEqual(cost_fct_vals[0], 1.5935015225944391)
+        self.assertAlmostEqual(cost_fct_vals[-1], 1.5931775725367523)
 
-    def test_decomposition_mu_beta0(self):
+    def test_decomposition_mu_beta2_tucker_init(self):
 
         # If this fails, determinism has failed. Hence, the rest of the test is bound to fail.
         self.assertAlmostEqual(self.random_tucker[0][0][0], 21.974433828159626)
 
-        core, factors, cost_fct_vals, toc = ntd_mu(self.random_tucker, self.random_ranks, init = "random", n_iter_max = 10, tol = 1e-8, beta = 0,
-                                                    deterministic = True,sparsity_coefficients = [None, None, None, None], fixed_modes = [], normalize = [False, False, False, False],
-                                                    verbose = False, return_costs = True)
+        core, factors, cost_fct_vals, toc = ntd(self.random_tucker, self.random_ranks, init = "tucker", n_iter_max = 10, tol = 1e-8,
+                                                update_rule="mu", beta = 2,
+                                                    sparsity_coefficients = [None, None, None, None], fixed_modes = [], normalize = [False, False, False, False],
+                                                    verbose = False, return_costs = True, deterministic = True, seed=0)
         
         # Checking factors
-        self.assertAlmostEqual(factors[0][0][0], 0.6112093668857077)
-        self.assertAlmostEqual(factors[1][0][0], 0.7871188331570661)
-        self.assertAlmostEqual(factors[2][0][0], 0.43120029540647997)
-        self.assertAlmostEqual(core[0,0,0], 0.6350545357176396)
+        self.assertAlmostEqual(factors[0][0][0], 0.1633567459395657)
+        self.assertAlmostEqual(factors[1][0][0], 0.09484478066313659)
+        self.assertAlmostEqual(factors[2][0][0], 0.1174295516693132)
+        self.assertAlmostEqual(core[0,0,0], 11046.430317228587)
         
         # Checking errors
-        self.assertAlmostEqual(cost_fct_vals[0], 21192.73157719653)
-        self.assertAlmostEqual(cost_fct_vals[-1], 189.0160787574748)
+        self.assertAlmostEqual(cost_fct_vals[0], 22653.665491321422)
+        self.assertAlmostEqual(cost_fct_vals[-1], 21679.048477120345)
+
+    def test_decomposition_mu_beta1_random_init(self):
+
+        # If this fails, determinism has failed. Hence, the rest of the test is bound to fail.
+        self.assertAlmostEqual(self.random_tucker[0][0][0], 21.974433828159626)
+
+        core, factors, cost_fct_vals, toc = ntd(self.random_tucker, self.random_ranks, init = "random", n_iter_max = 10, tol = 1e-8,
+                                                update_rule="mu", beta = 1,
+                                                    sparsity_coefficients = [None, None, None, None], fixed_modes = [], normalize = [False, False, False, False],
+                                                    verbose = False, return_costs = True, deterministic = True, seed=0)
+        
+        # Checking factors
+        self.assertAlmostEqual(factors[0][0][0], 0.5489424379755086)
+        self.assertAlmostEqual(factors[1][0][0], 0.9679939115774175)
+        self.assertAlmostEqual(factors[2][0][0], 0.9650587287572271)
+        self.assertAlmostEqual(core[0,0,0], 0.3744133064030978)
+        
+        # Checking errors
+        self.assertAlmostEqual(cost_fct_vals[0], 0.12936809612191502)
+        self.assertAlmostEqual(cost_fct_vals[-1], 0.1293171172587153)
+
+    def test_decomposition_mu_beta0_random_init(self):
+
+        # If this fails, determinism has failed. Hence, the rest of the test is bound to fail.
+        self.assertAlmostEqual(self.random_tucker[0][0][0], 21.974433828159626)
+
+        core, factors, cost_fct_vals, toc = ntd(self.random_tucker, self.random_ranks, init = "random", n_iter_max = 10, tol = 1e-8,
+                                                   update_rule="mu", beta = 0,
+                                                    sparsity_coefficients = [None, None, None, None], fixed_modes = [], normalize = [False, False, False, False],
+                                                    verbose = False, return_costs = True, deterministic = True, seed=0)
+        
+        # Checking factors
+        self.assertAlmostEqual(factors[0][0][0], 0.5488704375518113)
+        self.assertAlmostEqual(factors[1][0][0], 0.9680879599528461)
+        self.assertAlmostEqual(factors[2][0][0], 0.9650465314632987)
+        self.assertAlmostEqual(core[0,0,0], 0.3744250029550508)
+        
+        # Checking errors
+        self.assertAlmostEqual(cost_fct_vals[0], 0.01749656252808407)
+        self.assertAlmostEqual(cost_fct_vals[-1], 0.014723505531139436)
 
 
 
