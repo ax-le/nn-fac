@@ -10,16 +10,11 @@ import time
 import tensorly as tl
 import warnings
 
-from nimfa.methods import seeding
-
 import nn_fac.update_rules.nnls as nnls
 import nn_fac.update_rules.mu as mu
-
 import nn_fac.utils.beta_divergence as beta_div
 import nn_fac.utils.errors as err
-
-
-
+import nn_fac.utils.initialize_factors as init_factors
 
 def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
         update_rule = "hals", beta = 2,
@@ -186,31 +181,17 @@ def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
     factors = []
     nb_modes = len(tensor.shape)
 
-    if init.lower() == "random":
-        for mode in range(nb_modes):
-            factors.append(tl.tensor(np.random.rand(tensor.shape[mode], rank)))
-
-    elif init.lower() == "nndsvd":
-        for mode in range(nb_modes):
-            if tensor.shape[mode] < rank:
-                current_factor = np.random.rand(tensor.shape[mode], rank)
-            else:
-                with warnings.catch_warnings():
-                    warnings.simplefilter("ignore") # A warning arises from the nimfa toolbox, because of the sue of np.asmatrix.
-                    current_factor, useless_variable = seeding.Nndsvd().initialize(tl.unfold(tensor, mode), rank, {'flag': 0})
-            factors.append(tl.tensor(current_factor))
-
-    elif init.lower() == "custom":
+    if init.lower() == "custom":
         factors = factors_0
         if len(factors) != nb_modes:
-            raise Exception("Custom initialization, but not enough factors")
+            raise err.CustomNotEngouhFactors("Custom initialization, but not enough factors")
         else:
             for array in factors:
                 if array is None:
-                    raise Exception("Custom initialization, but one factor is set to 'None'")
-
+                    raise err.CustomNotValidFactors("Custom initialization, but (at least) one factor is set to 'None'")
+                
     else:
-        raise Exception('Initialization type not understood')
+        factors = init_factors.ntf_initialization(tensor, rank, init, deterministic=False, seed=0)
 
     return compute_ntf(tensor, rank, factors, n_iter_max=n_iter_max, tol=tol,
                        update_rule = update_rule, beta = beta,

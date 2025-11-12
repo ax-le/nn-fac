@@ -10,11 +10,23 @@ import nn_fac.multilayer_nmf as multi_nmf
 import nn_fac.utils.beta_divergence as beta_div
 from nn_fac.utils.normalize_wh import normalize_WH
 
-def deep_KL_NMF(data, all_ranks, n_iter_max_each_nmf = 100, n_iter_max_deep_loop = 100, init = "multilayer_nmf", init_multi_layer = "random", W_0 = None, H_0 = None, delta = 1e-6, tol = 1e-6, return_errors = False, verbose = False):
+def deep_KL_NMF(data, all_ranks, n_iter_max_each_nmf = 100, n_iter_max_deep_loop = 100, init = "multilayer_nmf", init_multi_layer = "nndsvd", W_0 = None, H_0 = None, delta = 1e-6, tol = 1e-6, return_errors = False, verbose = False, deterministic = False, seed = 0):
     L = len(all_ranks)
 
-    assert L > 1, "The number of layers must be at least 2. Otherwise, ou should just use NMF."
-    all_errors = np.zeros((n_iter_max_deep_loop + 1,L))
+    assert L > 1, "The number of layers must be at least 2. Otherwise, you should just use NMF."
+    if min(data.shape) < max(all_ranks):
+        count = 0
+        min_data = min(data.shape)
+        for idx, rank in enumerate(all_ranks):
+            if min_data < rank:
+                all_ranks[idx] = min_data
+                count += 1
+        print(f"The ranks are too high for the input matrix. The {count} larger ranks were set to {min_data} instead.")
+        warnings.warn("Ranks have been changed.")
+
+    reconstruction_errors = np.empty((L, n_iter_max_deep_loop + 1))
+    reconstruction_errors.fill(None)
+
     toc = []
     global_errors = []
 
@@ -23,19 +35,22 @@ def deep_KL_NMF(data, all_ranks, n_iter_max_each_nmf = 100, n_iter_max_deep_loop
         #warnings.warn("Warning: The ranks of deep NMF should be decreasing.")
 
     if init == "multilayer_nmf":
-        W, H, e = multi_nmf.multilayer_beta_NMF(data, all_ranks, n_iter_max_each_nmf = n_iter_max_each_nmf, init_each_nmf = init_multi_layer, delta = delta, return_errors = True, verbose = False)
-        all_errors[0] = e
+        W, H, e, _ = multi_nmf.multilayer_beta_NMF(data, all_ranks, beta=1, n_iter_max_each_nmf = n_iter_max_each_nmf, init_each_nmf = init_multi_layer, delta = delta, return_errors = True, verbose = False, deterministic=deterministic, seed=seed)
+        reconstruction_errors[:,0] = e[:,-1]
 
     elif init == "custom":
         W = W_0
         H = H_0
-        all_errors[0,0] = beta_div.kl_divergence(data, W[0] @ H[0])
+        reconstruction_errors[0,0] = beta_div.kl_divergence(data, W[0] @ H[0])
         for i in range(1,L):
-            all_errors[0,i] = [beta_div.kl_divergence(W[i-1], W[i] @ H[i])]
+            reconstruction_errors[i,0] = [beta_div.kl_divergence(W[i-1], W[i] @ H[i])]
+    
+    else:
+        raise ValueError("The init method is not supported.")
 
-    lambda_ = 1 / np.array(all_errors[0])
+    lambda_ = 1 / np.array(reconstruction_errors[:,0])
 
-    global_errors.append(lambda_.T @ all_errors[0])
+    global_errors.append(lambda_.T @ reconstruction_errors[:,0])
 
     for deep_iteration in range(n_iter_max_deep_loop):
         tic = time.time()
@@ -44,7 +59,7 @@ def deep_KL_NMF(data, all_ranks, n_iter_max_each_nmf = 100, n_iter_max_deep_loop
 
         toc.append(time.time() - tic)
 
-        all_errors[deep_iteration + 1] = errors
+        reconstruction_errors[:, deep_iteration + 1] = lambda_ * errors
         global_errors.append(lambda_.T @ errors)
 
         if verbose:
@@ -60,9 +75,9 @@ def deep_KL_NMF(data, all_ranks, n_iter_max_each_nmf = 100, n_iter_max_deep_loop
             if verbose:
                 print(f'Converged in {deep_iteration} iterations.')
             break
-    
+
     if return_errors:
-        return W, H, all_errors, toc
+        return W, H, reconstruction_errors, toc
     else:
         return W, H
 
@@ -101,4 +116,4 @@ if __name__ == "__main__":
     np.random.seed(0)
     m, n, all_ranks = 100, 200, [15,10,5]
     data = np.random.rand(m, n)  # Example input matrix
-    W, H, reconstruction_errors, toc = deep_KL_NMF(data, all_ranks, n_iter_max_each_nmf = 100, verbose = True)
+    W, H, reconstruction_errors, toc = deep_KL_NMF(data, all_ranks, n_iter_max_each_nmf = 100, verbose = True, deterministic=True, seed=0)

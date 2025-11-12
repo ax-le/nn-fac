@@ -3,6 +3,8 @@
 Created on Tue Jun 11 17:12:33 2019
 
 @author: amarmore
+
+TODO: check if it's still working, because it's old code and hasn't been tested recently.
 """
 
 import warnings
@@ -10,12 +12,13 @@ import numpy as np
 import time
 import nn_fac.update_rules.nnls as nnls
 import tensorly as tl
-from nimfa.methods import seeding
+import nn_fac.utils.errors as err
+import nn_fac.utils.initialize_factors as init_factors
 
 def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = None, H = None, D_list_in = None, W_star = None, P_list = None,
     tol_mu = 1e6, step_mu = 1.02, n_iter_max=100, tol=1e-6,
     sparsity_coefficient = None, fixed_modes = [], normalize = [False, False, False, False, False],
-    verbose=False, return_costs=False):
+    verbose=False, return_costs=False, deterministic=False, seed=0):
 
     """
     ========
@@ -174,52 +177,21 @@ def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = Non
 
     """
 
-    nb_channel = len(tensor_slices)
-    r, n = tensor_slices[0].shape
-
     W_list = []
     D_list = []
 
-    if init.lower() == "random":
-        H = np.random.rand(rank, n)
-        for k in range(nb_channel):
-            W_list.append(np.random.rand(r, rank))
-            D_list.append(np.diag(np.random.rand(rank)))
-        D_list = np.array(D_list)
-        if init_with_P:
-            zero_padded_identity = np.identity(r)
-            zero_padded_identity = zero_padded_identity[:,0:rank]
-            P_list = [zero_padded_identity for i in range(nb_channel)]
-        else:
-            W_star = np.random.rand(r, rank)
+    if deterministic:
+        np.random.seed(seed)
 
-    elif init.lower() == "nndsvd":
-        for k in range(nb_channel):
-            with warnings.catch_warnings():
-                warnings.simplefilter("ignore") # A warning arises from the nimfa toolbox, because of the sue of np.asmatrix.
-                W_k, H = seeding.Nndsvd().initialize(tensor_slices[k], rank, {'flag': 0})
-            W_list.append(W_k)
-            D_list.append(np.diag(np.random.rand(rank)))
-        D_list = np.array(D_list)
-        if init_with_P:
-            zero_padded_identity = np.identity(r)
-            zero_padded_identity = zero_padded_identity[:,0:rank]
-            P_list = [zero_padded_identity for i in range(nb_channel)]
-        else:
-            W_star_local = np.zeros(W_list[0].shape)
-            for k in range(nb_channel):
-                W_star_local += W_list[k]
-            W_star = np.divide(W_star_local, k)
-
-    elif init.lower() == "custom":
+    if init.lower() == "custom":
         if W_list_in is None or H is None or D_list_in is None: # No verification on P_list and W_star as it occurs below
-            raise Exception("Custom initialization, but one factor is set to 'None'")
+            raise err.CustomNotValidFactors("Custom initialization, but (at least) one factor is set to 'None'")
         else:
             W_list = W_list_in.copy()
             D_list = D_list_in.copy()
 
     else:
-        raise Exception('Initialization type not understood')
+        W_list, H, D_list, P_list, W_star = init_factors.parafac2_initialization(tensor_slices, rank, init, init_with_P, deterministic=deterministic, seed=seed)
 
     return compute_parafac_2(tensor_slices, rank, W_list_in = W_list, H_0 = H, D_list_in = D_list, init_with_P = init_with_P, W_star_in = W_star, P_list_in = P_list, n_iter_max=n_iter_max, tol=tol,
               sparsity_coefficient = sparsity_coefficient, fixed_modes = fixed_modes, normalize = [False, False, False, False],
@@ -345,6 +317,9 @@ def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_
         P_list= None
     else:
         P_list = P_list_in.copy()
+
+    if W_star is None and P_list is None:
+        raise err.InitializationNotValid("Initialization not valid: W^* and P_list cannot be both None.")
 
     # initialization - declare local varaibles
     cost_fct_vals = []

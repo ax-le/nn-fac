@@ -4,32 +4,29 @@
 
 import numpy as np
 import time
-from nimfa.methods import seeding
+import warnings
 
 import nn_fac.update_rules.mu as mu
 import nn_fac.utils.beta_divergence as beta_div
 import nn_fac.utils.errors as err
+import nn_fac.utils.initialize_factors as init_factors
 
 eps = 1e-12 # np.finfo(np.float64).eps
 
-def simplex_beta_nmf(data, rank, beta, n_iter_max = 100, tol = 1e-8, tol_update_lagrangian = 1e-6, init = "random", W_0 = None, H_0 = None, verbose = False):  
+def simplex_beta_nmf(data, rank, beta, n_iter_max = 100, tol = 1e-8, tol_update_lagrangian = 1e-6, init = "random", W_0 = None, H_0 = None, verbose = False, deterministic=False, seed=0):  
+    if deterministic:
+        np.random.seed(seed)
+        
     # Initialization for W and H
-    if init == 'random':
-        m,n = data.shape
-        np.random.seed(0)
-        W = np.random.rand(m, rank)
-        H = np.random.rand(rank, n)
-    # elif init.lower() == "nndsvd": #Doesn't work, to debug!
-    #     W, H = seeding.Nndsvd().initialize(data, rank, {'flag': 0})
-    #     W = np.maximum(W, eps)
-    #     H = np.maximum(H, eps)
-    elif init == 'custom':
-        assert W_0 is not None and H_0 is not None, "You must provide W_0 and H_0 if you want to use the custom initialization."
+    if init.lower() == "custom":
+        if W_0 is None or H_0 is None:
+            raise err.CustomNotValidFactors("Custom initialization, but (at least) one factor is set to 'None'")
         W = W_0
         H = H_0
+        
     else:
-        raise NotImplementedError(f"This initialization method is not implemented: {init}")
-    
+        W, H = init_factors.nmf_initialization(data, rank, init, deterministic=deterministic, seed=seed)
+
     return compute_simplex_beta_nmf(data=data, W_0=W, H_0=H, rank=rank, beta=beta,n_iter_max=n_iter_max, tol=tol, tol_update_lagrangian=tol_update_lagrangian, verbose = verbose)
 
 def compute_simplex_beta_nmf(data, W_0, H_0, rank, beta, n_iter_max = 100, tol = 1e-8, tol_update_lagrangian = 1e-6, verbose = False):

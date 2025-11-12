@@ -14,13 +14,12 @@ import nn_fac.update_rules.nnls as nnls
 import nn_fac.update_rules.mu as mu
 import nn_fac.utils.beta_divergence as beta_div
 import nn_fac.utils.errors as err
-
-from nimfa.methods import seeding
+import nn_fac.utils.initialize_factors as init_factors
 
 def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol=1e-8,
         update_rule = "hals", beta = 2,
         sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
-        verbose=False, return_costs=False, deterministic=False):
+        verbose=False, return_costs=False, deterministic=False, seed=0):
     """
     ======================================
     Nonnegative Matrix Factorization (NMF)
@@ -70,7 +69,7 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
             Corresponds to a Nonnegative Double Singular Value Decomposition
             (NNDSVD) initialization, which is a data based initialization,
             designed for NMF. See [2] for details.
-            This NNDSVD if performed via the nimfa toolbox [3].
+            This NNDSVD is implemented in the nn_fac.utils.initialize_factors module, based on the nimfa implementation [3].
         - If set to custom:
             U_0 and V_0 (see below) will be used for the initialization
         Default: random
@@ -178,29 +177,15 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
         rank = min_data
         warnings.warn(f"The rank is too high for the input matrix. It was set to {min_data} instead.")
 
-    if init.lower() == "random":
-        k, n = data.shape
-        if deterministic:
-            seed = np.random.RandomState(82)
-            U_0 = seed.rand(k, rank)
-            V_0 = seed.rand(rank, n)
-        else:
-            U_0 = np.random.rand(k, rank)
-            V_0 = np.random.rand(rank, n)
+    if deterministic:
+        np.random.seed(seed)
 
-    elif init.lower() == "nndsvd":
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore") # A warning arises from the nimfa toolbox, because of the sue of np.asmatrix.
-            U_0, V_0 = seeding.Nndsvd().initialize(data, rank, {'flag': 0})
-        U_0 = np.array(U_0 + 1e-12)
-        V_0 = np.array(V_0 + 1e-12)
-
-    elif init.lower() == "custom":
+    if init.lower() == "custom":
         if U_0 is None or V_0 is None:
-            raise Exception("Custom initialization, but one factor is set to 'None'")
-
+            raise err.CustomNotValidFactors("Custom initialization, but (at least) one factor is set to 'None'")
+        
     else:
-        raise Exception('Initialization type not understood')
+        U_0, V_0 = init_factors.nmf_initialization(data, rank, init, deterministic=deterministic, seed=seed)
 
     return compute_nmf(data, rank, U_0, V_0, n_iter_max=n_iter_max, tol=tol,
                        update_rule = update_rule, beta = beta,

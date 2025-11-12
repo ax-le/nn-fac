@@ -15,18 +15,19 @@ import time
 import tensorly as tl
 from tensorly.decomposition import tucker as tl_tucker
 import math
+import warnings
 
 import nn_fac.update_rules.nnls as nnls
 import nn_fac.update_rules.mu as mu
-
 import nn_fac.utils.beta_divergence as beta_div
 import nn_fac.utils.errors as err
+import nn_fac.utils.initialize_factors as init_factors
 
-import numpy as np
-# %% HALS
+# %% High level NTD function
 def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_max=100, tol=1e-6,
+        update_rule="hals", beta=2,
            sparsity_coefficients = [], fixed_modes = [], normalize = [], mode_core_norm = None,
-           verbose=False, return_costs=False, deterministic=False):
+           verbose=False, return_costs=False, deterministic=False, seed=0):
 
     """
     ======================================
@@ -47,15 +48,24 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
     Q is of size T.shape[2] * ranks[2],
     G is of size ranks[0] * ranks[1] * ranks[2].
 
-    More precisely, the chosen optimization algorithm is the HALS [2] for the factors,
-    which updates each factor columnwise, fixing every other columns,
-    and a projected gradient for the core,
-    which reduces the memory neccesited to perfome HALS on the core.
-    The projected gradient rule is derived by the authors, and doesn't appear in citation for now.
+    In this context, \approx means that the tensor product (W \otimes H \otimes Q) G
+    is meant to be as close as possible to T, with respect to some distance or divergence function.
 
-    Tensors are manipulated with the tensorly toolbox [3].
+    More precisely, the chosen optimization algorithm may be the:
+        -  HALS [2] for the factors, which updates each factor columnwise, fixing every other columns, 
+        and a projected gradient for the core,which reduces the memory neccesited to perfome HALS on the core.
+        The projected gradient rule is derived by the authors, as presented in [3].
+        HALS optimizes the squared Euclidean distance between T and its approximation.
+        -  Multiplicative Update (MU) rules [4] for both the factors and the core.
+        When using MU, the algorithm optimizes the $\beta$-divergence loss [5].
+        This divergence function generalizes some other divergences such as the Euclidean norm,
+        the Kullback-Leibler divergence and the Itakura-Saito divergence.
+        The Multiplicative Update rules are defined for NMF in [5] and redeveloped in [4].
+        This algorithm is described in more details in [6]. 
 
-    In tensorly and in our convention, tensors are unfolded and treated as described in [4].
+    Tensors are manipulated with the tensorly toolbox [7].
+
+    In tensorly and in our convention, tensors are unfolded and treated as described in [8].
 
     Parameters
     ----------
@@ -63,7 +73,7 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
         The nonnegative tensor T, to factorize
     ranks: list of integers
         The ranks for each factor of the decomposition
-    init: "random" | "tucker" | "custom" |
+    init: "random" | "tucker" | "chromas" | "custom"
         - If set to random:
             Initializes with random factors of the correct size.
             The randomization is the uniform distribution in [0,1),
@@ -95,6 +105,18 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
         Between two succesive iterations, if the difference between 
         both cost function values is below this threshold, the algorithm stops.
         Default: 1e-6
+    update_rule: "hals" | "mu"
+        The update rule used for the optimization.
+        "hals" optimizes the Euclidean norm only.
+        "mu" optimizes the beta-divergence, for any beta parameter.
+        Default: "hals"
+    beta: float
+        The beta parameter for the beta-divergence.
+        2 - Euclidean norm
+        1 - Kullback-Leibler divergence
+        0 - Itakura-Saito divergence
+        Other values are possible, see [5] for more details.$
+        Default: 2
     sparsity_coefficients: list of float (as much as the number of modes + 1 for the core)
         The sparsity coefficients on each factor and on the core respectively.
         If set to None or [], the algorithm is computed without sparsity
@@ -124,6 +146,9 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
         Runs the algorithm as a deterministic way, by fixing seed in all possible randomisation,
         and optimization techniques in the NNLS, function of the runtime.
         This is made to enhance reproducible research, and should be set to True for computation of results.
+    seed: integer
+        The seed for the random initialization, if deterministic is set to True.
+        Default: 0
 
     Returns
     -------
@@ -148,22 +173,42 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
     [1] Tamara G Kolda and Brett W Bader. "Tensor decompositions and applications",
     SIAM review 51.3 (2009), pp. 455{500.
 
-    [2]: N. Gillis and F. Glineur, Accelerated Multiplicative Updates and
+    [2] N. Gillis and F. Glineur, Accelerated Multiplicative Updates and
     Hierarchical ALS Algorithms for Nonnegative Matrix Factorization,
     Neural Computation 24 (4): 1085-1105, 2012.
 
-    [3] J. Kossai et al. "TensorLy: Tensor Learning in Python",
+    [3] Marmoret A., Cohen J.E., Bertin, N., Bimbot F. "Uncovering audio 
+    patterns in music with nonnegative Tucker decomposition for structural 
+    segmentation" In ISMIR 2020-21st International Society for Music 
+    Information Retrieval, Nov 2020 
+
+    [4] Févotte, C., & Idier, J. (2011). 
+    Algorithms for nonnegative matrix factorization with the β-divergence. 
+    Neural computation, 23(9), 2421-2456.
+    
+    [5] Lee, D. D., & Seung, H. S. (1999). 
+    Learning the parts of objects by non-negative matrix factorization.
+    Nature, 401(6755), 788-791.
+
+    [6] Marmoret, A., Voorwinden, F., Leplat, V., Cohen, J.E., and Bimbot, F.
+    "Nonnegative tucker decomposition with beta-divergence for music structure 
+    analysis of audio signals". In XXVIIIème Colloque Francophone de Traitement
+    du Signal et des Images (GRETSI 2022), Nov 2022 
+
+    [7] J. Kossai et al. "TensorLy: Tensor Learning in Python",
     arxiv preprint (2018)
 
-    [4] Jeremy E Cohen. "About notations in multiway array processing",
+    [8] Jeremy E Cohen. "About notations in multiway array processing",
     arXiv preprint arXiv:1511.01306, (2015).
     """
 
-    factors = []
     nb_modes = len(tensor.shape)
 
-    if type(ranks) is int:
-        ranks = [ranks for i in nb_modes]
+    if deterministic:
+        np.random.seed(seed)
+
+    if type(ranks) is int: # if only one rank is provided, use it for all modes
+        ranks = [ranks for i in range(nb_modes)]
     elif len(ranks) != nb_modes:
         raise err.InvalidRanksException("The number of ranks is different than the dim of the tensor, which is incorrect.") from None
 
@@ -171,45 +216,12 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
         if ranks[i] > tensor.shape[i]:
             #raise err.InvalidRanksException("The " + str(i) + "-th mode rank is larger than the shape of the tensor, which is incorrect.") from None
             ranks[i] = tensor.shape[i]
-            #warnings.warn('ignoring MIDI message %s' % msg)
-            print("The " + str(i) + "-th mode rank was larger than the shape of the tensor, which is incorrect. Set to the shape of the tensor")
+            warnings.warn(f"The {i}-th mode rank was larger than the shape of the tensor, which is incorrect (rank: {ranks[i]}, tensor shape: {tensor.shape[i]}). The rank was then set to the shape of the tensor.")
 
-    if init.lower() == "random":
-        for mode in range(nb_modes):
-            if deterministic:
-                seed = np.random.RandomState(mode * 10)
-                random_array = seed.rand(tensor.shape[mode], ranks[mode])
-            else:
-                random_array = np.random.rand(tensor.shape[mode], ranks[mode])
-            factors.append(tl.tensor(random_array))
+    if update_rule == "hals":
+        assert beta == 2, f"Beta parameter is only used for MU update rule. Please set update_rule to 'mu' to use another beta value than 2. (Current setting: beta = {beta} and update_rule = {update_rule})."
 
-        if deterministic:
-            seed = np.random.RandomState(nb_modes * 10)
-            core = tl.tensor(seed.rand(np.prod(ranks)).reshape(tuple(ranks)))
-        else:
-            core = tl.tensor(np.random.rand(np.prod(ranks)).reshape(tuple(ranks)))
-
-    elif init.lower() == "tucker":        
-        if deterministic:
-            init_core, init_factors = tl_tucker(tensor, ranks, random_state = 8142)
-        else:
-            init_core, init_factors = tl_tucker(tensor, ranks)
-        factors = [tl.abs(f) for f in init_factors]
-        core = tl.abs(init_core)
-
-    elif init.lower() == "chromas":
-        #TODO: Tucker where W is already set to I12
-        if deterministic:
-            init_core, init_factors = tl_tucker(tensor, ranks, random_state = 8142)
-        else:
-            init_core, init_factors = tl_tucker(tensor, ranks)
-        init_factors[0] = np.identity(12) # En dur, à être modifié
-        factors = [tl.abs(f) for f in init_factors]
-        if 0 not in fixed_modes:
-            fixed_modes.append(0)
-        core = tl.abs(init_core)
-
-    elif init.lower() == "custom":
+    if init.lower() == "custom":
         factors = factors_0
         core = core_0
         if len(factors) != nb_modes:
@@ -217,30 +229,36 @@ def ntd(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_ma
         else:
             for array in factors:
                 if array is None:
-                    raise err.CustomNotValidFactors("Custom initialization, but one factor is set to 'None'")
+                    raise err.CustomNotValidFactors("Custom initialization, but (at least) one factor is set to 'None'")
             if core is None:
                 raise err.CustomNotValidCore("Custom initialization, but the core is set to 'None'")
 
     else:
-        raise err.InvalidInitializationType('Initialization type not understood: ' + init)
+        core, factors = init_factors.ntd_initialization(tensor, ranks, init, deterministic=deterministic, seed=seed)
+    
+    if (init.lower() == "chromas") and (0 not in fixed_modes):
+        fixed_modes.append(0)
 
     return compute_ntd(tensor, ranks, core, factors, n_iter_max=n_iter_max, tol=tol,
+                       update_rule=update_rule, beta=beta,
                        sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, 
                        normalize = normalize, mode_core_norm = mode_core_norm,
-                       verbose=verbose, return_costs=return_costs, deterministic = deterministic)
+                       verbose=verbose, return_costs=return_costs, deterministic = deterministic, seed=seed)
 
 def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
+                update_rule="hals", beta=2,
            sparsity_coefficients = [], fixed_modes = [], normalize = [], mode_core_norm=None,
-           verbose=False, return_costs=False, deterministic=False):
+           verbose=False, return_costs=False, deterministic=False, seed=0):
 
     """
     Computation of a Nonnegative Tucker Decomposition [1]
-    via hierarchical alternating least squares (HALS) [2],
-    with factors_in as initialization.
+    via hierarchical alternating least squares (HALS) [2]
+    or multiplicative updates (MU) [3], with factors_in 
+    as initialization.
 
-    Tensors are manipulated with the tensorly toolbox [3].
+    Tensors are manipulated with the tensorly toolbox [4].
 
-    In tensorly and in our convention, tensors are unfolded and treated as described in [4].
+    In tensorly and in our convention, tensors are unfolded and treated as described in [5].
 
     Parameters
     ----------
@@ -260,6 +278,18 @@ def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
         Between two iterations, if the difference between 
         both cost function values is below this threshold, the algorithm stops.
         Default: 1e-8
+    update_rule: "hals" | "mu"
+        The update rule used for the optimization.
+        "hals" optimizes the Euclidean norm only.
+        "mu" optimizes the beta-divergence, for any beta parameter.
+        Default: "hals"
+    beta: float
+        The beta parameter for the beta-divergence.
+        2 - Euclidean norm
+        1 - Kullback-Leibler divergence
+        0 - Itakura-Saito divergence
+        Other values are possible, see [3] for more details.
+        Default: 2
     sparsity_coefficients: list of float (as much as the number of modes + 1 for the core)
         The sparsity coefficients on each factor and on the core respectively.
         If set to None or [], the algorithm is computed without sparsity
@@ -288,6 +318,9 @@ def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
     deterministic:
         Runs the algorithm as a deterministic way, by fixing seed in all possible randomisation.
         This is made to enhance reproducible research.
+    seed: integer
+        The seed for the random initialization, if deterministic is set to True.
+        Default: 0
 
     Returns
     -------
@@ -309,10 +342,14 @@ def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
     Hierarchical ALS Algorithms for Nonnegative Matrix Factorization,
     Neural Computation 24 (4): 1085-1105, 2012.
 
-    [3] J. Kossai et al. "TensorLy: Tensor Learning in Python",
+    [3] Févotte, C., & Idier, J. (2011). 
+    Algorithms for nonnegative matrix factorization with the β-divergence. 
+    Neural computation, 23(9), 2421-2456.
+
+    [4] J. Kossai et al. "TensorLy: Tensor Learning in Python",
     arxiv preprint (2018)
 
-    [4] Jeremy E Cohen. "About notations in multiway array processing",
+    [5] Jeremy E Cohen. "About notations in multiway array processing",
     arXiv preprint arXiv:1511.01306, (2015).
     """
 
@@ -353,12 +390,19 @@ def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
     # Iterate over one step of NTD
     for iteration in range(n_iter_max):
         # One pass of least squares on each updated mode
-        if deterministic:
-            core, factors, cost = one_ntd_step(tensor, ranks, core, factors, norm_tensor,
-                                          sparsity_coefficients, fixed_modes, normalize, mode_core_norm, alpha = math.inf)
+        if update_rule=="hals":
+            if deterministic: # Removing some acceleration parameters for reproducibility 
+                core, factors, cost = one_ntd_step(tensor, ranks, core, factors, norm_tensor,
+                                            sparsity_coefficients, fixed_modes, normalize, mode_core_norm, alpha = math.inf)
+            else:
+                core, factors, cost = one_ntd_step(tensor, ranks, core, factors, norm_tensor,
+                                            sparsity_coefficients, fixed_modes, normalize, mode_core_norm)
+
+        elif update_rule=="mu":
+             core, factors, cost = one_ntd_step_mu(tensor, ranks, core, factors, beta, norm_tensor,fixed_modes, normalize, mode_core_norm)
+            
         else:
-            core, factors, cost = one_ntd_step(tensor, ranks, core, factors, norm_tensor,
-                                          sparsity_coefficients, fixed_modes, normalize, mode_core_norm)
+            raise err.InvalidArgumentValue(f"The update rule provided is not valid. Please choose between 'hals' and 'mu' (Got {update_rule}).")
 
         # Store the computation time
         toc.append(time.time() - tic)
@@ -388,7 +432,7 @@ def compute_ntd(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
     else:
         return core, factors
 
-
+# %% One NTD step - HALS
 def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
                  sparsity_coefficients, fixed_modes, normalize, mode_core_norm, 
                  alpha=0.5, delta=0.01):
@@ -602,286 +646,14 @@ def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
 
 
 # %% With MU rules
-######################### Temporary, to test mu and not break everything (should be merged to ntd in the end, but there is still development on this function)
 def ntd_mu(tensor, ranks, init = "random", core_0 = None, factors_0 = [], n_iter_max=1000, tol=1e-6,
            beta = 2, sparsity_coefficients = [], fixed_modes = [], normalize = [], mode_core_norm = None,
            verbose=False, return_costs=False, deterministic=False):
     """
-    =============================================================================
-    Nonnegative Tucker Decomposition (NTD) minimizing the $\beta$-divergence loss
-    =============================================================================
-
-    Factorization of a tensor T in nonnegative matrices,
-    linked by a nonnegative core tensor, of dimensions equal to the ranks
-    (in general smaller than the tensor).
-    See more details about the NTD in [1].
-
-    For example, in the third-order case, resolution of:
-        T \approx (W \otimes H \otimes Q) G
-
-    In this example, W, H and Q are the factors, one per mode, and G is the core tensor.
-    W is of size T.shape[0] * ranks[0],
-    H is of size T.shape[1] * ranks[1],
-    Q is of size T.shape[2] * ranks[2],
-    G is of size ranks[0] * ranks[1] * ranks[2].
-
-    In this context, \approx means that the tensor product (W \otimes H \otimes Q) G
-    is meant to be as close as possible to T, with respect to some distance or divergence function.
-    
-    In `ntd_mu`, this divergence is the $\beta$-divergence loss [2].
-    This divergence function generalizes some other divergences such as the Euclidean norm,
-    the Kullback-Leibler divergence and the Itakura-Saito divergence.
-    
-    This approximation is obtained with an optimization algorithm, and more specfically,
-    by using the Multiplicative Update as defined for NMF in [3] and redeveloped in [2].
-    
-    This algorithm will be described in a future publication 
-    (TODO: update this comments at submission/publication time.)
-
-    Tensors are manipulated with the tensorly toolbox [4].
-
-    In tensorly and in our convention, tensors are unfolded and treated as described in [5].
-
-    Parameters
-    ----------
-    tensor: tensorly tensor
-        The nonnegative tensor T, to factorize
-    ranks: list of integers
-        The ranks for each factor of the decomposition
-    init: "random" | "tucker" | "custom" |
-        - If set to random:
-            Initializes with random factors of the correct size.
-            The randomization is the uniform distribution in [0,1),
-            which is the default from numpy random.
-        - If set to tucker:
-            Resolve a tucker decomposition of the tensor T (by HOSVD) and
-            initializes the factors and the core as this resolution, clipped to be nonnegative.
-            The tucker decomposition is performed with tensorly [3].
-        - If set to custom:
-            core_0 and factors_0 (see below) will be used for the initialization
-        Default: random
-    core_0: None or tensor of nonnegative floats
-        A custom initialization of the core, used only in "custom" init mode.
-        Default: None
-    factors_0: None or list of array of nonnegative floats
-        A custom initialization of the factors, used only in "custom" init mode.
-        Default: None
-    n_iter_max: integer
-        The maximal number of iteration before stopping the algorithm
-        Default: 100
-    tol: float
-        Threshold on the improvement in cost function value.
-        Between two succesive iterations, if the difference between 
-        both cost function values is below this threshold, the algorithm stops.
-        Default: 1e-6
-    beta: float
-        The beta parameter for the beta-divergence.
-        2 - Euclidean norm
-        1 - Kullback-Leibler divergence
-        0 - Itakura-Saito divergence
-    sparsity_coefficients: list of float (as much as the number of modes + 1 for the core)
-        The sparsity coefficients on each factor and on the core respectively.
-        If set to None or [], the algorithm is computed without sparsity
-        Default: []
-    fixed_modes: list of integers (between 0 and the number of modes + 1 for the core)
-        Has to be set not to update a factor, taken in the order of modes and lastly on the core.
-        Default: []
-    normalize: list of boolean (as much as the number of modes + 1 for the core)
-        Indicates whether the factors need to be normalized or not.
-        The normalization is a l_2 normalization on each of the rank components
-        (For the factors, each column will be normalized, ie each atom of the dimension of the current rank).
-        Default: []
-    mode_core_norm: integer or None
-        The mode on which normalize the core, or None if normalization shouldn't be enforced.
-        Will only be useful if the last element of the previous "normalise" argument is set to True.
-        Indexes of the modes start at 0.
-        Default: None
-    verbose: boolean
-        Indicates whether the algorithm prints the successive
-        normalized cost function values or not
-        Default: False
-    return_costs: boolean
-        Indicates whether the algorithm should return all normalized cost function 
-        values and computation time of each iteration or not
-        Default: False
-    deterministic:
-        Runs the algorithm as a deterministic way, by fixing seed in all possible randomisation,
-        and optimization techniques in the NNLS, function of the runtime.
-        This is made to enhance reproducible research, and should be set to True for computation of results.
-
-    Returns
-    -------
-    core: tensorly tensor
-        The core tensor linking the factors of the decomposition
-    factors: numpy #TODO: For tensorly pulling, replace numpy by backend
-        An array containing all the factors computed with the NTD
-    cost_fct_vals: list
-        A list of the normalized cost function values, for every iteration of the algorithm.
-    toc: list, only if return_errors == True
-        A list with accumulated time at each iterations
-
-    Example
-    -------
-    tensor = np.random.rand(80,100,120)
-    ranks = [10,20,15]
-    core, factors = NTD.ntd(tensor, ranks = ranks, init = "tucker", verbose = True, hals = False,
-                            sparsity_coefficients = [None, None, None, None], normalize = [True, True, False, True])
-
-    References
-    ----------
-    [1] Tamara G Kolda and Brett W Bader. "Tensor decompositions and applications",
-    SIAM review 51.3 (2009), pp. 455{500.
-
-    [2] Févotte, C., & Idier, J. (2011). 
-    Algorithms for nonnegative matrix factorization with the β-divergence. 
-    Neural computation, 23(9), 2421-2456.
-    
-    [3] Lee, D. D., & Seung, H. S. (1999). 
-    Learning the parts of objects by non-negative matrix factorization.
-    Nature, 401(6755), 788-791.
-
-    [4] J. Kossai et al. "TensorLy: Tensor Learning in Python",
-    arxiv preprint (2018)
-
-    [5] Jeremy E Cohen. "About notations in multiway array processing",
-    arXiv preprint arXiv:1511.01306, (2015).
+    DEPRECATED
+    Now move in the general ntd function.
     """
-    factors = []
-    nb_modes = len(tensor.shape)
-
-    if type(ranks) is int:
-        ranks = [ranks for i in nb_modes]
-    elif len(ranks) != nb_modes:
-        raise err.InvalidRanksException("The number of ranks is different than the dim of the tensor, which is incorrect.") from None
-
-    for i in range(nb_modes):
-        if ranks[i] > tensor.shape[i]:
-            #raise err.InvalidRanksException("The " + str(i) + "-th mode rank is larger than the shape of the tensor, which is incorrect.") from None
-            ranks[i] = tensor.shape[i]
-            #warnings.warn('ignoring MIDI message %s' % msg)
-            print("The " + str(i) + "-th mode rank was larger than the shape of the tensor, which is incorrect. Set to the shape of the tensor")
-
-    if init.lower() == "random":
-        for mode in range(nb_modes):
-            if deterministic:
-                seed = np.random.RandomState(mode * 10)
-                random_array = seed.rand(tensor.shape[mode], ranks[mode])
-            else:
-                random_array = np.random.rand(tensor.shape[mode], ranks[mode])
-            factors.append(tl.tensor(random_array))
-
-        if deterministic:
-            seed = np.random.RandomState(nb_modes * 10)
-            core = tl.tensor(seed.rand(np.prod(ranks)).reshape(tuple(ranks)))
-        else:
-            core = tl.tensor(np.random.rand(np.prod(ranks)).reshape(tuple(ranks)))
-        
-        factors = [np.maximum(f, 1e-12) for f in factors]
-        core = np.maximum(core, 1e-12)
-
-    elif init.lower() == "tucker":        
-        if deterministic:
-            init_core, init_factors = tl_tucker(tensor, ranks, random_state = 8142)
-        else:
-            init_core, init_factors = tl_tucker(tensor, ranks)
-        factors = [np.maximum(tl.abs(f), 1e-12) for f in init_factors]
-        core = np.maximum(tl.abs(init_core), 1e-12)
-
-    elif init.lower() == "custom":
-        factors = factors_0
-        core = core_0
-        if len(factors) != nb_modes:
-            raise err.CustomNotEngouhFactors("Custom initialization, but not enough factors")
-        else:
-            for array in factors:
-                if array is None:
-                    raise err.CustomNotValidFactors("Custom initialization, but one factor is set to 'None'")
-            if core is None:
-                raise err.CustomNotValidCore("Custom initialization, but the core is set to 'None'")
-
-    else:
-        raise err.InvalidInitializationType('Initialization type not understood: ' + init)
-
-    return compute_ntd_mu(tensor, ranks, core, factors, n_iter_max=n_iter_max, tol=tol,
-                       sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, 
-                       normalize = normalize, mode_core_norm = mode_core_norm,
-                       verbose=verbose, return_costs=return_costs, beta = beta, deterministic = deterministic)
-
-def compute_ntd_mu(tensor_in, ranks, core_in, factors_in, n_iter_max=100, tol=1e-6,
-           sparsity_coefficients = [], fixed_modes = [], normalize = [], beta = 2, mode_core_norm=None,
-           verbose=False, return_costs=False, deterministic=False):
-    
-    """
-    Computes the NTD, with parameters initialized in the `ntd_mu` function.
-    """
-
-    # initialisation - store the input varaibles
-    core = core_in.copy()
-    factors = factors_in.copy()
-    tensor = tensor_in
-
-    norm_tensor = tl.norm(tensor, 2)
-
-    # set init if problem
-    #TODO: set them as warnings
-    nb_modes = len(tensor.shape)
-    if sparsity_coefficients == None or len(sparsity_coefficients) != nb_modes + 1:
-        print("Irrelevant number of sparsity coefficient (different from the number of modes + 1 for the core), they have been set to None.")
-        sparsity_coefficients = [None for i in range(nb_modes + 1)]
-    if fixed_modes == None:
-        fixed_modes = []
-    if normalize == None or len(normalize) != nb_modes + 1:
-        print("Irrelevant number of normalization booleans (different from the number of modes + 1 for the core), they have been set to False.")
-        normalize = [False for i in range(nb_modes + 1)]
-    if normalize[-1] and (mode_core_norm == None or mode_core_norm < 0 or mode_core_norm >= nb_modes):
-        print("The core was asked to be normalized, but an invalid mode was specified. Normalization has been set to False.")
-        normalize[-1] = False
-    if not normalize[-1] and (mode_core_norm != None and mode_core_norm >= 0 and mode_core_norm < nb_modes):
-        print("The core was asked NOT to be normalized, but mode_core_norm was set to a valid norm. Is this a mistake?")
-    
-    # initialisation - declare local varaibles
-    cost_fct_vals = []
-    tic = time.time()
-    toc = []
-
-    # initialisation - unfold the tensor according to the modes
-    #unfolded_tensors = []
-    #for mode in range(tl.ndim(tensor)):
-    #   unfolded_tensors.append(tl.base.unfold(tensor, mode))
-
-    # Iterate over one step of NTD
-    for iteration in range(n_iter_max):
-        # One pass of least squares on each updated mode
-        core, factors, cost = one_ntd_step_mu(tensor, ranks, core, factors, beta, norm_tensor,
-                                              fixed_modes, normalize, mode_core_norm)
-
-        # Store the computation time
-        toc.append(time.time() - tic)
-
-        cost_fct_vals.append(cost)
-
-        if verbose:
-            if iteration == 0:
-                print('Initial Obj={}'.format(cost))
-            else:
-                if cost_fct_vals[-2] - cost_fct_vals[-1] > 0:
-                    print('Iter={}|Obj={}| Var={} (target is {}).'.format(iteration,
-                            cost_fct_vals[-1], (abs(cost_fct_vals[-2] - cost_fct_vals[-1])/abs(cost_fct_vals[-2])),tol))
-                else:
-                    # print in red when the reconstruction error is negative (shouldn't happen)
-                    print('\033[91m' + 'Iter={}|Obj={}| Var={} (target is {}).'.format(iteration,
-                            cost_fct_vals[-1], (abs(cost_fct_vals[-2] - cost_fct_vals[-1])/abs(cost_fct_vals[-2])),tol) + '\033[0m')
-
-        if iteration > 0 and (abs(cost_fct_vals[-2] - cost_fct_vals[-1])/abs(cost_fct_vals[-2])) < tol:
-            # Stop condition: relative error between last two iterations < tol
-            if verbose:
-                print('Converged to the required tolerance in {} iterations.'.format(iteration))
-            break
-
-    if return_costs:
-        return core, factors, cost_fct_vals, toc
-    else:
-        return core, factors
+    raise DeprecationWarning("The ntd_mu function is deprecated. Please use the ntd function with update_rule='mu' instead.")
 
 def one_ntd_step_mu(tensor, ranks, in_core, in_factors, beta, norm_tensor,
                    fixed_modes, normalize, mode_core_norm):
