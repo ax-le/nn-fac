@@ -420,6 +420,18 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
         
         elif update_rule == "mu":
             U = mu.switch_alternate_mu(data, U, V, beta, "U") #mu.mu_betadivmin(U, V, data, beta)
+            
+            if normalize[0]:
+                n, _ = np.shape(data)
+                _, r = np.shape(U)
+                for k in range(r):
+                    norm = np.linalg.norm(U[:,k])
+                    if norm != 0:
+                        U[:,k] /= norm
+                    else:
+                        sqrt_n = 1/n ** (1/2)
+                        U[:,k] = [sqrt_n for _ in range(n)]
+                        #assert False
 
     if 1 not in fixed_modes:
         # V update
@@ -445,6 +457,17 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
         
         elif update_rule == "mu":
             V = mu.switch_alternate_mu(data, U, V, beta, "V") # np.transpose(mu.mu_betadivmin(V.T, U.T, data.T, beta))
+
+            if normalize[1]:
+                _, n = np.shape(data)
+                r, _ = np.shape(V)
+                for k in range(r):
+                    norm = np.linalg.norm(V[k,:])
+                    if norm != 0:
+                        V[k,:] /= norm
+                    else:
+                        sqrt_n = 1/n ** (1/2)
+                        V[k,:] = [sqrt_n for _ in range(n)]
 
     sparsity_coefficients = np.where(np.array(sparsity_coefficients) == None, 0, sparsity_coefficients)
     
