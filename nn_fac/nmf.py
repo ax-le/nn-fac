@@ -19,7 +19,7 @@ import nn_fac.utils.initialize_factors as init_factors
 def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol=1e-8,
         update_rule = "hals", beta = 2,
         sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
-        verbose=False, return_costs=False, deterministic=False, seed=0):
+        verbose=False, return_costs=False, deterministic=False, rev_order=False, seed=0):
     """
     ======================================
     Nonnegative Matrix Factorization (NMF)
@@ -190,13 +190,13 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
     return compute_nmf(data, rank, U_0, V_0, n_iter_max=n_iter_max, tol=tol,
                        update_rule = update_rule, beta = beta,
                        sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, normalize = normalize,
-                       verbose=verbose, return_costs=return_costs, deterministic=deterministic)
+                       verbose=verbose, return_costs=return_costs, deterministic=deterministic, rev_order=rev_order)
 
 # Author : Jeremy Cohen, modified by Axel Marmoret
 def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
                 update_rule = "hals", beta = 2,
                 sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
-                verbose=False, return_costs=False, deterministic=False):
+                verbose=False, return_costs=False, deterministic=False, rev_order=False):
     """
     Computation of a Nonnegative matrix factorization via
     hierarchical alternating least squares (HALS) [1],
@@ -298,8 +298,8 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
     for iteration in range(n_iter_max):
 
         # One pass of least squares on each updated mode
-        U, V, cost = one_nmf_step(data, rank, U, V, norm_data, update_rule, beta,
-                                  sparsity_coefficients, fixed_modes, normalize, deterministic)
+        U, V, cost = one_nmf_step_test(data, rank, U, V, norm_data, update_rule, beta,
+                                  sparsity_coefficients, fixed_modes, normalize, deterministic, rev_order=rev_order)
 
         toc.append(time.time() - tic)
 
@@ -469,6 +469,119 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
                         sqrt_n = 1/n ** (1/2)
                         V[k,:] = [sqrt_n for _ in range(n)]
 
+    sparsity_coefficients = np.where(np.array(sparsity_coefficients) == None, 0, sparsity_coefficients)
+    
+    if update_rule == "hals":
+        cost = np.linalg.norm(data-np.dot(U,V), ord='fro') ** 2 + 2 * (sparsity_coefficients[0] * np.linalg.norm(U, ord=1) + sparsity_coefficients[1] * np.linalg.norm(V, ord=1))
+    
+    elif update_rule == "mu":
+        cost = beta_div.beta_divergence(data, np.dot(U,V), beta)
+
+    #cost = cost/(norm_data**2)
+    return U, V, cost
+
+def one_nmf_step_test(data, rank, U_in, V_in, norm_data, update_rule, beta,
+                 sparsity_coefficients, fixed_modes, normalize, deterministic, rev_order=False, n_stepU=100, n_stepV=100):
+    """
+    Adding the possibility of choosing the number of nnls steps and the order of updates
+    """
+    if update_rule not in ["hals", "mu"]:
+        raise err.InvalidArgumentValue(f"Invalid update rule: {update_rule}") from None
+    if update_rule == "hals" and beta != 2:
+        raise err.InvalidArgumentValue(f"The hals is only valid for the frobenius norm, corresponding to the beta divergence with beta = 2. Here, beta was set to {beta}. To compute NMF with this value of beta, please use the mu update_rule.") from None
+
+    if len(sparsity_coefficients) != 2:
+        raise ValueError("NMF needs 2 sparsity coefficients to be performed")
+
+    # Copy
+    U = U_in.copy()
+    V = V_in.copy()
+
+    def update_U(X):
+        if 0 not in fixed_modes:
+            if update_rule == "hals":
+                # Set timer for acceleration in hals_nnls_acc
+                tic = time.time()
+        
+                # Computing cross products
+                VVt = np.dot(V,np.transpose(V))
+                VMt = np.dot(V,np.transpose(data))
+        
+                # End timer for acceleration in hals_nnls_acc
+                timer = time.time() - tic
+        
+                # Compute HALS/NNLS resolution
+                if deterministic:
+                    Y = np.transpose(nnls.hals_nnls_acc(VMt, VVt, np.transpose(U_in), maxiter=n_stepU, atime=timer, alpha=math.inf, delta=0.01,
+                                                    sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False)[0])
+                else:
+                    Y = np.transpose(nnls.hals_nnls_acc(VMt, VVt, np.transpose(U_in), maxiter=n_stepU, atime=timer, alpha=0.5, delta=0.01,
+                                                    sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False)[0])
+            
+            elif update_rule == "mu":
+                Y = mu.switch_alternate_mu(data, X, V, beta, "U") #mu.mu_betadivmin(U, V, data, beta)
+                
+                if normalize[0]:
+                    n, _ = np.shape(data)
+                    _, r = np.shape(Y)
+                    for k in range(r):
+                        norm = np.linalg.norm(Y[:,k])
+                        if norm != 0:
+                            Y[:,k] /= norm
+                        else:
+                            sqrt_n = 1/n ** (1/2)
+                            Y[:,k] = [sqrt_n for _ in range(n)]
+                            #assert False
+            return Y
+        else :
+            return X
+    
+    def update_V(X):
+        if 1 not in fixed_modes:
+            if update_rule == "hals":
+                # Set timer for acceleration in hals_nnls_acc
+                tic = time.time()
+        
+                # Computing cross products
+                UtU = np.dot(np.transpose(U),U)
+                UtM = np.dot(np.transpose(U),data)
+        
+                # End timer for acceleration in hals_nnls_acc
+                timer = time.time() - tic
+        
+                # Compute HALS/NNLS resolution
+                if deterministic:
+                    Y = nnls.hals_nnls_acc(UtM, UtU, V_in, maxiter=n_stepV, atime=timer, alpha=math.inf, delta=0.01,
+                                    sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False)[0]
+                else:
+                    Y = nnls.hals_nnls_acc(UtM, UtU, V_in, maxiter=n_stepV, atime=timer, alpha=0.5, delta=0.01,
+                                    sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False)[0]
+            
+            elif update_rule == "mu":
+                Y = mu.switch_alternate_mu(data, U, X, beta, "V") # np.transpose(mu.mu_betadivmin(V.T, U.T, data.T, beta))
+
+                if normalize[1]:
+                    _, n = np.shape(data)
+                    r, _ = np.shape(Y)
+                    for k in range(r):
+                        norm = np.linalg.norm(Y[k,:])
+                        if norm != 0:
+                            Y[k,:] /= norm
+                        else:
+                            sqrt_n = 1/n ** (1/2)
+                            Y[k,:] = [sqrt_n for _ in range(n)]
+            return Y
+        else :
+            return X
+    
+    if rev_order:
+        V = update_V(V)
+        U = update_U(U)
+    
+    else :
+        U = update_U(U)
+        V = update_V(V)
+    
     sparsity_coefficients = np.where(np.array(sparsity_coefficients) == None, 0, sparsity_coefficients)
     
     if update_rule == "hals":
