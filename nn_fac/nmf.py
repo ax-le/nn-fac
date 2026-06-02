@@ -16,7 +16,7 @@ import nn_fac.utils.beta_divergence as beta_div
 import nn_fac.utils.errors as err
 import nn_fac.utils.initialize_factors as init_factors
 
-def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol=1e-8,
+def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, n_stepU=100, n_stepV=100, tol=1e-8,
         update_rule = "hals", beta = 2,
         sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
         verbose=False, return_costs=False, deterministic=False, rev_order=False, seed=0):
@@ -187,13 +187,13 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
     else:
         U_0, V_0 = init_factors.nmf_initialization(data, rank, init, deterministic=deterministic, seed=seed)
 
-    return compute_nmf(data, rank, U_0, V_0, n_iter_max=n_iter_max, tol=tol,
+    return compute_nmf(data, rank, U_0, V_0, n_iter_max=n_iter_max, n_stepU=n_stepU, n_stepV=n_stepV, tol=tol,
                        update_rule = update_rule, beta = beta,
                        sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, normalize = normalize,
                        verbose=verbose, return_costs=return_costs, deterministic=deterministic, rev_order=rev_order)
 
 # Author : Jeremy Cohen, modified by Axel Marmoret
-def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
+def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, n_stepU=100, n_stepV=100, tol=1e-8,
                 update_rule = "hals", beta = 2,
                 sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
                 verbose=False, return_costs=False, deterministic=False, rev_order=False):
@@ -299,7 +299,7 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
 
         # One pass of least squares on each updated mode
         U, V, cost = one_nmf_step_test(data, rank, U, V, norm_data, update_rule, beta,
-                                  sparsity_coefficients, fixed_modes, normalize, deterministic, rev_order=rev_order)
+                                sparsity_coefficients, fixed_modes, normalize, deterministic, rev_order=rev_order, n_stepU=n_stepU, n_stepV=n_stepV)
 
         toc.append(time.time() - tic)
 
