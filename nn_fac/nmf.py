@@ -9,6 +9,7 @@ import numpy as np
 import time
 import math
 import warnings
+import matplotlib.pyplot as plt
 
 import nn_fac.update_rules.nnls as nnls
 import nn_fac.update_rules.mu as mu
@@ -497,26 +498,24 @@ def one_nmf_step_test(data, rank, U_in, V_in, norm_data, update_rule, beta,
     U = U_in.copy()
     V = V_in.copy()
 
+    #V = np.random.rand(rank, len(V[0,:])) + 1e-12
+
     def update_U(X):
         if 0 not in fixed_modes:
             if update_rule == "hals":
                 # Set timer for acceleration in hals_nnls_acc
                 tic = time.time()
         
-                # Computing cross products
-                VVt = np.dot(V,np.transpose(V))
-                VMt = np.dot(V,np.transpose(data))
-        
                 # End timer for acceleration in hals_nnls_acc
                 timer = time.time() - tic
         
                 # Compute HALS/NNLS resolution
                 if deterministic:
-                    Y = np.transpose(nnls.hals_nnls_acc(VMt, VVt, np.transpose(U_in), maxiter=n_stepU, atime=timer, alpha=math.inf, delta=0.01,
-                                                    sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False)[0])
+                    Y = np.transpose(nnls.hals_nnls_acc_test(np.transpose(data), np.transpose(V), np.transpose(U_in), maxiter=n_stepU, atime=timer, alpha=math.inf, delta=0.01,
+                                                    sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False, return_costs=False)[0])
                 else:
-                    Y = np.transpose(nnls.hals_nnls_acc(VMt, VVt, np.transpose(U_in), maxiter=n_stepU, atime=timer, alpha=0.5, delta=0.01,
-                                                    sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False)[0])
+                    Y = np.transpose(nnls.hals_nnls_acc_test(np.transpose(data), np.transpose(V), np.transpose(U_in), maxiter=n_stepU, atime=timer, alpha=0.5, delta=0.01,
+                                                    sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False, return_costs=False)[0])
             
             elif update_rule == "mu":
                 Y = mu.switch_alternate_mu(data, X, V, beta, "U") #mu.mu_betadivmin(U, V, data, beta)
@@ -542,20 +541,18 @@ def one_nmf_step_test(data, rank, U_in, V_in, norm_data, update_rule, beta,
                 # Set timer for acceleration in hals_nnls_acc
                 tic = time.time()
         
-                # Computing cross products
-                UtU = np.dot(np.transpose(U),U)
-                UtM = np.dot(np.transpose(U),data)
-        
                 # End timer for acceleration in hals_nnls_acc
                 timer = time.time() - tic
         
                 # Compute HALS/NNLS resolution
                 if deterministic:
-                    Y = nnls.hals_nnls_acc(UtM, UtU, V_in, maxiter=n_stepV, atime=timer, alpha=math.inf, delta=0.01,
-                                    sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False)[0]
+                    Y,_,_,_ = nnls.hals_nnls_acc_test(data, U, V_in, maxiter=n_stepV, atime=timer, alpha=math.inf, delta=0.01,
+                                    sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False, return_costs=False)
+                    #plt.plot(costs_H_updt)
+                    #plt.show()
                 else:
-                    Y = nnls.hals_nnls_acc(UtM, UtU, V_in, maxiter=n_stepV, atime=timer, alpha=0.5, delta=0.01,
-                                    sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False)[0]
+                    Y = nnls.hals_nnls_acc_test(data, U, V_in, maxiter=n_stepV, atime=timer, alpha=0.5, delta=0.01,
+                                    sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False, return_costs=False)[0]
             
             elif update_rule == "mu":
                 Y = mu.switch_alternate_mu(data, U, X, beta, "V") # np.transpose(mu.mu_betadivmin(V.T, U.T, data.T, beta))

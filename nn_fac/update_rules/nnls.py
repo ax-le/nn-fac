@@ -197,6 +197,195 @@ def hals_nnls_acc(UtM, UtU, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01
 
     return V, eps, cnt, rho
 
+def hals_nnls_acc_test(M, U, in_V, maxiter=500, atime=None, alpha=0.5, delta=0.01,
+                  sparsity_coefficient = None, normalize = False, nonzero = False, return_costs=False):
+## Author : Axel Marmoret, based on Jeremy Cohen version's of Nicolas Gillis Matlab's code for HALS
+
+    """
+    ===========================================================================
+    Non Negative Least Squares (NNLS) with Hierachical Alternating Least Square
+    ===========================================================================
+
+    Computes an approximate solution of a nonnegative least
+    squares problem (NNLS) with an exact block-coordinate descent scheme.
+    M is m by n, U is m by r, V is r by n.
+    All matrices are nonnegative componentwise.
+
+    The NNLS unconstrained problem, as defined in [1], solve the following problem:
+
+            min_{V >= 0} ||M-UV||_F^2
+
+    The matrix V is updated linewise.
+
+    The update rule of the k-th line of V (V[k,:]) for this resolution is:
+
+            V[k,:]_(j+1) = V[k,:]_(j) + (UtM[k,:] - UtU[k,:] V_(j))/UtU[k,k]
+
+    with j the update iteration.
+
+    This problem can also be defined by adding a sparsity coefficient,
+    enhancing sparsity in the solution [2]. The problem thus becomes:
+
+            min_{V >= 0} ||M-UV||_F^2 + 2*sparsity_coefficient*(\sum\limits_{j = 0}^{r}||V[k,:]||_1)
+
+    NB: 2*sp for uniformization in the derivative
+
+    In this sparse version, the update rule for V[k,:] becomes:
+
+            V[k,:]_(j+1) = V[k,:]_(j) + (UtM[k,:] - UtU[k,:] V_(j) - sparsity_coefficient)/UtU[k,k]
+
+    This algorithm is defined in [1], as an accelerated version of the HALS algorithm.
+
+    It features two accelerations: an early stop stopping criterion, and a
+    complexity averaging between precomputations and loops, so as to use large
+    precomputations several times.
+
+    This function is made for being used repetively inside an
+    outer-loop alternating algorithm, for instance for computing nonnegative
+    matrix Factorization or tensor factorization.
+
+    Parameters
+    ----------
+    UtM: r-by-n array
+        Pre-computed product of the transposed of U and M, used in the update rule
+    UtU: r-by-r array
+        Pre-computed product of the transposed of U and U, used in the update rule
+    in_V: r-by-n initialization matrix (mutable)
+        Initialized V array
+        By default, is initialized with one non-zero entry per column
+        corresponding to the closest column of U of the corresponding column of M.
+    maxiter: Postivie integer
+        Upper bound on the number of iterations
+        Default: 500
+    atime: Positive float
+        Time taken to do the precomputations UtU and UtM
+        Default: None
+    alpha: Positive float
+        Ratio between outer computations and inner loops, typically set to 0.5 or 1.
+        Default: 0.5
+    delta : float in [0,1]
+        early stop criterion, while err_k > delta*err_0. Set small for
+        almost exact nnls solution, or larger (e.g. 1e-2) for inner loops
+        of a PARAFAC computation.
+        Default: 0.01
+    sparsity_coefficient: float or None
+        The coefficient controling the sparisty level in the objective function.
+        If set to None, the problem is solved unconstrained.
+        Default: None
+    normalize: boolean
+        True in order to normalize each of the k-th line of V after the update
+        False not to update them
+        Default: False
+    nonzero: boolean
+        True if the lines of the V matrix can't be zero,
+        False if they can be zero
+        Default: False
+
+    Returns
+    -------
+    V: array
+        a r-by-n nonnegative matrix \approx argmin_{V >= 0} ||M-UV||_F^2
+    eps: float
+        number of loops authorized by the error stop criterion
+    cnt: integer
+        final number of update iteration performed
+    rho: float
+        number of loops authorized by the time stop criterion
+
+    References
+    ----------
+    [1]: N. Gillis and F. Glineur, Accelerated Multiplicative Updates and
+    Hierarchical ALS Algorithms for Nonnegative Matrix Factorization,
+    Neural Computation 24 (4): 1085-1105, 2012.
+
+    [2] J. Eggert, and E. Korner. "Sparse coding and NMF."
+    2004 IEEE International Joint Conference on Neural Networks
+    (IEEE Cat. No. 04CH37541). Vol. 4. IEEE, 2004.
+
+    """
+
+    # Computing cross products
+    UtU = np.dot(np.transpose(U),U)
+    UtM = np.dot(np.transpose(U),M)
+
+    if len(np.shape(UtM)) != 2:
+        raise err.ArgumentException(f"Argument UtM is an array of {np.shape(UtM)} dimensions when it should be a matrix.")
+    if len(np.shape(UtU)) != 2:
+        raise err.ArgumentException(f"Argument UtU is an array of {np.shape(UtU)} dimensions when it should be a matrix.")
+    if len(np.shape(in_V)) != 2:
+        raise err.ArgumentException(f"Argument in_V is an array of {np.shape(in_V)} dimensions when it should be a matrix.")
+        
+    r, n = np.shape(UtM)
+    # if not in_V.size:  # checks if V is empty
+    #     V = np.linalg.linalg.solve(UtU, UtM)  # Least squares
+
+    #     V[V < 0] = 0
+    #     # Scaling
+    #     scale = np.sum(UtM * V)/np.sum(
+    #         UtU * np.dot(V, np.transpose(V)))
+    #     V = np.dot(scale, V)
+    # else:
+    V = in_V.copy()
+
+    rho = 100000
+    eps0 = 0
+    cnt = 1
+    eps = 1
+    costs = []
+
+    # Start timer
+    tic = time.time()
+    while cnt <= maxiter: # and eps >= delta * eps0 and cnt <= 1+alpha*rho:
+        nodelta = 0
+        for k in range(r):
+
+            if UtU[k,k] != 0:
+
+                if sparsity_coefficient != None: # Using the sparsifying objective function
+                    deltaV = np.maximum((UtM[k,:] - UtU[k,:]@V - sparsity_coefficient * np.ones(n)) / UtU[k,k], -V[k,:])
+                    V[k,:] = V[k,:] + deltaV
+
+                else:
+                    deltaV = np.maximum((UtM[k,:]- UtU[k,:]@V) / UtU[k,k],-V[k,:])
+                    V[k,:] = V[k,:] + deltaV
+
+                nodelta = nodelta + np.dot(deltaV, np.transpose(deltaV))
+
+                # Safety procedure, if columns aren't allow to be zero
+                if nonzero and (V[k,:] == 0).all() :
+                    V[k,:] = 1e-16*np.max(V)
+
+            elif nonzero:
+                raise err.ZeroColumnWhenUnautorized("Column " + str(k) + " of U is zero with nonzero condition")
+
+            if normalize:
+                norm = np.linalg.norm(V[k,:])
+                if norm != 0:
+                    V[k,:] /= norm
+                else:
+                    sqrt_n = 1/n ** (1/2)
+                    V[k,:] = [sqrt_n for i in range(n)]
+            
+            if return_costs:
+                c = np.linalg.norm(M-np.dot(U,V))/np.linalg.norm(M)
+                costs.append(c)
+        
+        if cnt == 1:
+            eps0 = nodelta
+            # End timer for one iteration
+            btime = max(time.time() - tic, 10e-7) # Avoid division by 0
+
+            if atime:  # atime is provided
+                # Number of loops authorized
+                rho = atime/btime
+        eps = nodelta
+        cnt += 1
+
+    if return_costs:
+        return V, eps, cnt, rho, costs
+
+    return V, eps, cnt, rho
+
 #### Sandbox of NNLS, for specials cases (as PARAFAC2 as other constraints than sparsity).
 #### This code is flagged as "sandbow" because it's not properly tested.
 
