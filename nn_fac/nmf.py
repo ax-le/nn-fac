@@ -511,10 +511,10 @@ def one_nmf_step_test(data, rank, U_in, V_in, norm_data, update_rule, beta,
         
                 # Compute HALS/NNLS resolution
                 if deterministic:
-                    Y = np.transpose(nnls.hals_nnls_acc_test(np.transpose(data), np.transpose(V), np.transpose(U_in), maxiter=n_stepU, atime=timer, alpha=math.inf, delta=0.01,
+                    Y = np.transpose(nnls.hals_nnls_acc_test(np.transpose(data), np.transpose(V), np.transpose(X), maxiter=n_stepU, atime=timer, alpha=math.inf, delta=0.01,
                                                     sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False, return_costs=False)[0])
                 else:
-                    Y = np.transpose(nnls.hals_nnls_acc_test(np.transpose(data), np.transpose(V), np.transpose(U_in), maxiter=n_stepU, atime=timer, alpha=0.5, delta=0.01,
+                    Y = np.transpose(nnls.hals_nnls_acc_test(np.transpose(data), np.transpose(V), np.transpose(X), maxiter=n_stepU, atime=timer, alpha=0.5, delta=0.01,
                                                     sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False, return_costs=False)[0])
             
             elif update_rule == "mu":
@@ -546,12 +546,12 @@ def one_nmf_step_test(data, rank, U_in, V_in, norm_data, update_rule, beta,
         
                 # Compute HALS/NNLS resolution
                 if deterministic:
-                    Y,_,_,_ = nnls.hals_nnls_acc_test(data, U, V_in, maxiter=n_stepV, atime=timer, alpha=math.inf, delta=0.01,
+                    Y,_,_,_ = nnls.hals_nnls_acc_test(data, U, X, maxiter=n_stepV, atime=timer, alpha=math.inf, delta=0.01,
                                     sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False, return_costs=False)
                     #plt.plot(costs_H_updt)
                     #plt.show()
                 else:
-                    Y = nnls.hals_nnls_acc_test(data, U, V_in, maxiter=n_stepV, atime=timer, alpha=0.5, delta=0.01,
+                    Y = nnls.hals_nnls_acc_test(data, U, X, maxiter=n_stepV, atime=timer, alpha=0.5, delta=0.01,
                                     sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False, return_costs=False)[0]
             
             elif update_rule == "mu":
@@ -582,7 +582,7 @@ def one_nmf_step_test(data, rank, U_in, V_in, norm_data, update_rule, beta,
     sparsity_coefficients = np.where(np.array(sparsity_coefficients) == None, 0, sparsity_coefficients)
     
     if update_rule == "hals":
-        cost = np.linalg.norm(data-np.dot(U,V), ord='fro') ** 2 + 2 * (sparsity_coefficients[0] * np.linalg.norm(U, ord=1) + sparsity_coefficients[1] * np.linalg.norm(V, ord=1))
+        cost = np.linalg.norm(data-np.dot(U,V), ord='fro') ** 2 #+ 2 * (sparsity_coefficients[0] * np.linalg.norm(U, ord=1) + sparsity_coefficients[1] * np.linalg.norm(V, ord=1))
     
     elif update_rule == "mu":
         cost = beta_div.beta_divergence(data, np.dot(U,V), beta)
