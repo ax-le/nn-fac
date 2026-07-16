@@ -5,9 +5,9 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="nn_fac",
-    version="0.3.4",
+    version="0.3.5",
     author="Marmoret Axel",
-    author_email="axel.marmoret@irisa.fr",
+    author_email="axel.marmoret@imt-atlantique.fr",
     description="Nonnegative factorization toolbox.",
     long_description=long_description,
     long_description_content_type="text/markdown",
@@ -21,7 +21,7 @@ setuptools.setup(
         "Intended Audience :: Science/Research",
         "Topic :: Scientific/Engineering :: Mathematics",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
-        "Programming Language :: Python :: 3.7"
+        "Programming Language :: Python :: 3.8"
     ],
     license='BSD',
     install_requires=[
@@ -29,5 +29,5 @@ setuptools.setup(
         'scipy >= 0.13.0',
         'tensorly == 0.6.0',
     ],
-    python_requires='>=3.7',
+    python_requires='>=3.8',
 )
