@@ -7,9 +7,9 @@ Created on Mon Aug 16 14:45:25 2021
 ## Author : Axel Marmoret, based on Florian Voorwinden's code during its internship.
 
 """
-
-import numpy as np
+import tensorly as tl
 import nn_fac.utils.errors as err
+import nn_fac.utils.tensorly_additional_utils as tl_additional_utils
 
 def kl_divergence(a, b):
     return beta_divergence(a, b, beta=1)
@@ -43,13 +43,13 @@ def beta_divergence(a, b, beta):
         raise err.InvalidArgumentValue("Invalid value for beta: negative one.") from None
     
     if beta == 1:
-        #return np.sum(a * np.log(a/b, where=(a!=0)) - a + b)
-        a_div_b = np.divide(a,b, where=(b!=0))
-        return np.sum(a * np.log(a_div_b, where=(a_div_b!=0)) - a + b)
+        a_div_b = tl.where(b!=0, a/b, a/1e-12)
+        return tl.sum(a * tl_additional_utils.log(a_div_b) - a + b)
     elif beta == 0:
-        return np.sum(a/b - np.log(a/b, where=(a!=0)) - 1)
+        a_div_b = tl.where(b!=0, a/b, a/1e-12)
+        return tl.sum(a_div_b - tl_additional_utils.log(a_div_b) - 1)
     else:
-        return np.sum(1/(beta*(beta -1)) * (a**beta + (beta - 1) * b**beta - beta * a * (b**(beta-1))))
+        return tl.sum(1/(beta*(beta -1)) * (a**beta + (beta - 1) * b**beta - beta * a * (b**(beta-1))))
     
 def gamma_beta(beta):
     """

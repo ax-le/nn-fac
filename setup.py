@@ -25,7 +25,7 @@ setuptools.setup(
     ],
     license='BSD',
     install_requires=[
-        'numpy >= 1.18.0',
+        'numpy >= 2.0',
         'scipy >= 0.13.0',
         'tensorly == 0.6.0',
     ],

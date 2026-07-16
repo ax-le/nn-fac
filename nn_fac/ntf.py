@@ -5,7 +5,6 @@ Created on Tue Jun 11 16:52:21 2019
 @author: amarmore
 """
 
-import numpy as np
 import time
 import tensorly as tl
 import warnings
@@ -103,8 +102,8 @@ def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
         The sparsity coefficients on U and V respectively.
         If set to None, the algorithm is computed without sparsity
         Default: [],
-    fixed_modes: array of integers (between 0 and the number of modes)
-        Has to be set not to update a factor, 0 and 1 for U and V respectively
+    fixed_modes: array of booleans (as much as the number of modes)
+        Indicates whether the factor is fixed (not updated) or not.
         Default: []
     normalize: array of boolean (as much as the number of modes)
         A boolean whereas the factors need to be normalized.
@@ -122,8 +121,8 @@ def ntf(tensor, rank, init = "random", factors_0 = [], n_iter_max=100, tol=1e-8,
 
     Returns
     -------
-    np.array(factors): numpy array
-        An array containing all the factors computed with PARAFAC decomposition
+    factors: list of arrays
+        A list containing all the factors computed with PARAFAC decomposition
     cost_fct_vals: list
         A list of the normalized cost function values, for every iteration of the algorithm.
     toc: list
@@ -241,8 +240,8 @@ def compute_ntf(tensor_in, rank, factors_in, n_iter_max=100, tol=1e-8,
         The sparsity coefficients on U and V respectively.
         If set to None, the algorithm is computed without sparsity
         Default: [],
-    fixed_modes: List of integers (between 0 and the number of modes)
-        Has to be set not to update a factor, 0 and 1 for U and V respectively
+    fixed_modes: List of booleans (as much as the number of modes)
+        Indicates whether the factor is fixed (not updated) or not.
         Default: []
     normalize: List of boolean (as much as the number of modes)
         A boolean whereas the factors need to be normalized.
@@ -260,8 +259,8 @@ def compute_ntf(tensor_in, rank, factors_in, n_iter_max=100, tol=1e-8,
 
     Returns
     -------
-    np.array(factors): numpy array
-        An array containing all the factors computed with PARAFAC decomposition
+    factors: list of arrays
+        A list containing all the factors computed with PARAFAC decomposition
     cost_fct_vals: list
         A list of the normalized cost function values, for every iteration of the algorithm.
     toc: list
@@ -294,8 +293,8 @@ def compute_ntf(tensor_in, rank, factors_in, n_iter_max=100, tol=1e-8,
     if sparsity_coefficients == None or len(sparsity_coefficients) != nb_modes:
         print("Irrelevant number of sparsity coefficient (different from the number of modes), they have been set to None.")
         sparsity_coefficients = [None for i in range(nb_modes)]
-    if fixed_modes == None:
-        fixed_modes = []
+    if fixed_modes == None or len(fixed_modes) != nb_modes:
+        fixed_modes = [False for i in range(nb_modes)]
     if normalize == None or len(normalize) != nb_modes:
         print("Irrelevant number of normalization booleans (different from the number of modes), they have been set to False.")
         normalize = [False for i in range(nb_modes)]
@@ -339,9 +338,9 @@ def compute_ntf(tensor_in, rank, factors_in, n_iter_max=100, tol=1e-8,
             break
 
     if return_costs:
-        return np.array(factors), cost_fct_vals, toc
+        return factors, cost_fct_vals, toc
     else:
-        return np.array(factors)
+        return factors
 
 
 def one_ntf_step(unfolded_tensors, rank, in_factors, norm_tensor, update_rule, beta,
@@ -382,8 +381,8 @@ def one_ntf_step(unfolded_tensors, rank, in_factors, norm_tensor, update_rule, b
         0 - Itakura-Saito divergence
     sparsity_coefficients : List of floats
         sparsity coefficients for every mode.
-    fixed_modes : List of integers
-        Indexes of modes that are not updated
+    fixed_modes : List of booleans
+        Indicates, per mode, whether the factor is fixed (not updated) or not
     normalize: List of boolean (as much as the number of modes)
         A boolean where the factors need to be normalized.
         The normalization is a l_2 normalization on each of the rank components
@@ -400,8 +399,8 @@ def one_ntf_step(unfolded_tensors, rank, in_factors, norm_tensor, update_rule, b
 
     Returns
     -------
-    np.array(factors): numpy array
-        An array containing all the factors computed with PARAFAC decomposition
+    factors: list of arrays
+        A list containing all the factors computed with PARAFAC decomposition
     cost_fct_val:
         The value of the cost function at this step,
         normalized by the squared norm of the original tensor.
@@ -425,53 +424,57 @@ def one_ntf_step(unfolded_tensors, rank, in_factors, norm_tensor, update_rule, b
         raise err.InvalidArgumentValue(f"The hals is only valid for the frobenius norm, corresponding to the beta divergence with beta = 2. Here, beta was set to {beta}. To compute NMF with this value of beta, please use the mu update_rule.") from None
 
     # Avoiding errors
-    for fixed_value in fixed_modes:
-        sparsity_coefficients[fixed_value] = None
+    for i, is_fixed in enumerate(fixed_modes):
+        if is_fixed:
+            sparsity_coefficients[i] = None
 
     # Copy
     factors = in_factors.copy()
 
     # Generating the mode update sequence
-    gen = [mode for mode in range(len(unfolded_tensors)) if mode not in fixed_modes]
+    gen = [mode for mode in range(len(unfolded_tensors)) if not fixed_modes[mode]]
 
     for mode in gen:
-        if update_rule == "hals":
-            tic = time.time()
-    
-            # Computing Hadamard of cross-products
-            cross = tl.tensor(tl.ones((rank,rank)))#, **tl.context(tensor))
-            for i, factor in enumerate(factors):
-                if i != mode:
-                    cross *= tl.dot(tl.transpose(factor),factor)
-    
-            # Computing the Khatri Rao product
-            krao = tl.tenalg.khatri_rao(factors, skip_matrix = mode)
-            rhs = tl.dot(unfolded_tensors[mode],krao)
-    
-            timer = time.time() - tic
-    
-            # Call the hals resolution with nnls, optimizing the current mode
-            factors[mode] = tl.transpose(nnls.hals_nnls_acc(tl.transpose(rhs), cross, tl.transpose(factors[mode]),
-                   maxiter=100, atime=timer, alpha=alpha, delta=delta,
-                   sparsity_coefficient = sparsity_coefficients[mode], normalize = normalize[mode])[0])
-            
-        elif update_rule == "mu":
-            krao = tl.tenalg.khatri_rao(factors, skip_matrix = mode)
-            factors[mode] = mu.mu_betadivmin(factors[mode], krao.T, unfolded_tensors[mode], beta)
+        match update_rule:
+            case "hals":
+                # Computing Hadamard of cross-products
+                cross = tl.tensor(tl.ones((rank,rank)))#, **tl.context(tensor))
+                for i, factor in enumerate(factors):
+                    if i != mode:
+                        cross *= tl.dot(tl.transpose(factor),factor)
+
+                # Computing the Khatri Rao product
+                krao = tl.tenalg.khatri_rao(factors, skip_matrix = mode)
+                rhs = tl.dot(unfolded_tensors[mode],krao)
+
+                # Call the hals resolution with nnls, optimizing the current mode
+                factors[mode] = tl.transpose(nnls.compute_hals_nnls(V=tl.transpose(factors[mode]), UtM=tl.transpose(rhs), UtU=cross,
+                       maxiter=100, sparsity_coefficient = sparsity_coefficients[mode], normalize = normalize[mode], hals_inner_tol=1e-8)[0])
+
+            case "mu":
+                krao = tl.tenalg.khatri_rao(factors, skip_matrix = mode)
+                factors[mode] = mu.mu_betadivmin(factors[mode], krao.T, unfolded_tensors[mode], beta)
+
+            case _:
+                raise err.InvalidArgumentValue(f"Invalid update rule: {update_rule}") from None
 
     # Adding the l1 norm value to the reconstruction error
     sparsity_error = 0
     for index, sparse in enumerate(sparsity_coefficients):
         if sparse:
-            sparsity_error += 2 * (sparse * np.linalg.norm(factors[index], ord=1))
+            sparsity_error += 2 * (sparse * tl.norm(factors[index], order=1))
 
-    if update_rule == "hals":
-        # error computation (improved using precomputed quantities)
-        rec_error = norm_tensor ** 2 - 2*tl.dot(tl.tensor_to_vec(factors[mode]),tl.tensor_to_vec(rhs)) +  tl.norm(tl.dot(factors[mode],tl.transpose(krao)),2)**2
-    
-    elif update_rule == "mu":
-        rec_error = beta_div.beta_divergence(unfolded_tensors[mode], factors[mode]@krao.T, beta)
-        
+    match update_rule:
+        case "hals":
+            # error computation (improved using precomputed quantities)
+            rec_error = norm_tensor ** 2 - 2*tl.dot(tl.tensor_to_vec(factors[mode]),tl.tensor_to_vec(rhs)) +  tl.norm(tl.dot(factors[mode],tl.transpose(krao)),2)**2
+
+        case "mu":
+            rec_error = beta_div.beta_divergence(unfolded_tensors[mode], factors[mode]@krao.T, beta)
+
+        case _:
+            raise err.InvalidArgumentValue(f"Invalid update rule: {update_rule}") from None
+
     cost_fct_val = (rec_error + sparsity_error) / (norm_tensor ** 2)
 
     return factors, cost_fct_val

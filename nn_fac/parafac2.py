@@ -17,7 +17,7 @@ import nn_fac.utils.initialize_factors as init_factors
 
 def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = None, H = None, D_list_in = None, W_star = None, P_list = None,
     tol_mu = 1e6, step_mu = 1.02, n_iter_max=100, tol=1e-6,
-    sparsity_coefficient = None, fixed_modes = [], normalize = [False, False, False, False, False],
+    sparsity_coefficient = None, fixed_modes = [False, False, False, False, False], normalize = [False, False, False, False, False],
     verbose=False, return_costs=False, deterministic=False, seed=0):
 
     """
@@ -116,9 +116,10 @@ def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = Non
         The sparsity coefficient on H.
         If set to None, the algorithm is computed without sparsity
         Default: None
-    fixed_modes: array of integers (between 0 and 5)
-        Has to be set not to update a factor, 0 and 1 for U and V respectively
-        Default: []
+    fixed_modes: array of booleans (5)
+        Indicates, for each of W_list, H, D_list, W_star and P_list respectively,
+        whether it is fixed (not updated) or not.
+        Default: [False, False, False, False, False]
     normalize: array of boolean (5)
         Indicates whether the factors need to be normalized or not.
         The normalization is a l_2 normalization on each of the rank components
@@ -201,7 +202,7 @@ def parafac_2(tensor_slices, rank, init_with_P, init = "random", W_list_in = Non
 # Author : Jeremy Cohen, modified by Axel Marmoret
 def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_P, W_star_in = None, P_list_in = None,
     tol_mu = 1e6, step_mu = 1.02, n_iter_max=100, tol=1e-8,
-    sparsity_coefficient = None, fixed_modes = [], normalize = [False, False, False, False, False],
+    sparsity_coefficient = None, fixed_modes = [False, False, False, False, False], normalize = [False, False, False, False, False],
     verbose=False, return_costs=False):
 
     """
@@ -259,9 +260,10 @@ def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_
         The sparsity coefficient on H.
         If set to None, the algorithm is computed without sparsity
         Default: None
-    fixed_modes: array of integers (between 0 and 5)
-        Has to be set not to update a factor, 0 and 1 for U and V respectively
-        Default: []
+    fixed_modes: array of booleans (5)
+        Indicates, for each of W_list, H, D_list, W_star and P_list respectively,
+        whether it is fixed (not updated) or not.
+        Default: [False, False, False, False, False]
     normalize: array of boolean (5)
         A boolean to indicate where the factors need to be normalized.
         The normalization is a l_2 normalization on each of the rank components
@@ -320,6 +322,9 @@ def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_
 
     if W_star is None and P_list is None:
         raise err.InitializationNotValid("Initialization not valid: W^* and P_list cannot be both None.")
+
+    if fixed_modes == None or len(fixed_modes) != 5:
+        fixed_modes = [False, False, False, False, False]
 
     # initialization - declare local varaibles
     cost_fct_vals = []
@@ -402,7 +407,7 @@ def compute_parafac_2(tensor_slices, rank, W_list_in, H_0, D_list_in, init_with_
 def one_step_parafac2(slices, rank, W_list_in, H_in, D_list_in, mu_list_in, norm_slices,
                       previous_cost_fct_val, increasing_mu = True, tol_mu = 1e6, step_mu = 1.02,
                       init_with_P = True, W_star_in = None, P_list_in = None,
-                      sparsity_coefficient = None, fixed_modes = [], normalize = [False, False, False, False, False]):
+                      sparsity_coefficient = None, fixed_modes = [False, False, False, False, False], normalize = [False, False, False, False, False]):
 
     """ One pass of PARAFAC 2 update on all channels
 
@@ -458,9 +463,10 @@ def one_step_parafac2(slices, rank, W_list_in, H_in, D_list_in, mu_list_in, norm
         The sparsity coefficient on H.
         If set to None, the algorithm is computed without sparsity
         Default: None
-    fixed_modes: array of integers (between 0 and 5)
-        Has to be set not to update a factor, 0 and 1 for U and V respectively
-        Default: []
+    fixed_modes: array of booleans (5)
+        Indicates, for each of W_list, H, D_list, W_star and P_list respectively,
+        whether it is fixed (not updated) or not.
+        Default: [False, False, False, False, False]
     normalize: array of boolean (5)
         A boolean where the factors need to be normalized.
         The normalization is a l_2 normalization on each of the rank components
@@ -510,17 +516,10 @@ def one_step_parafac2(slices, rank, W_list_in, H_in, D_list_in, mu_list_in, norm
         if 0 not in fixed_modes:
             # Update W_k
 
-            tic = time.time()
-
             DkH = D_list[k]@H
 
-            VVt = np.dot(DkH, np.transpose(DkH))
-            VMt = np.dot(DkH, np.transpose(slices[k]))
-
-            timer = time.time() - tic
-
-            W_list[k] = np.transpose(nnls.hals_coupling_nnls_acc(VMt, VVt, np.transpose(W_list[k]), np.transpose(P_list[k]@W_star), mu_list[k],
-                                                                maxiter=100, atime=timer, alpha=0.5, delta=0.01,
+            W_list[k] = np.transpose(nnls.hals_coupling_nnls_acc(np.transpose(slices[k]), np.transpose(DkH), np.transpose(W_list[k]), np.transpose(P_list[k]@W_star), mu_list[k],
+                                                                maxiter=100, alpha=0.5, delta=0.01,
                                                                 normalize = normalize[0], nonzero = False)[0])
 
         if 2 not in fixed_modes:

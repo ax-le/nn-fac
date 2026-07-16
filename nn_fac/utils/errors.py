@@ -12,6 +12,7 @@ class CustomNotValidFactors(ArgumentException): pass
 class CustomNotValidCore(ArgumentException): pass
 class InvalidInitializationType(ArgumentException): pass
 class InvalidArgumentValue(ArgumentException): pass
+class InitializationNotValid(ArgumentException): pass
 
 
 class OptimException(BaseException): pass

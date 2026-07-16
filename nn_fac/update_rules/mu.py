@@ -7,8 +7,6 @@ Created on Mon Aug 16 14:45:25 2021
 ## Author : Axel Marmoret, based on Florian Voorwinden's code during its internship.
 
 """
-
-import numpy as np
 import time
 import tensorly as tl
 import nn_fac.utils.errors as err
@@ -19,12 +17,17 @@ epsilon = 1e-12
 
 def switch_alternate_mu(data, U, V, beta, matrix):
     """
-    Encapsulates the switch between the two multiplicative update rules.
+    High-level wrapper around mu_betadivmin that handles both factor updates
+    (U and V), mirroring the interface of switch_alternate_hals in nnls.
+
+    For the V update the problem is transposed: min_{V>=0} d(data, UV) is
+    recast as min_{V.T>=0} d(data.T, V.T U.T) so that mu_betadivmin always
+    optimises over its first argument.
     """
     if matrix in ["U", "W"]:
         return mu_betadivmin(U, V, data, beta)
     elif matrix in ["V", "H"]:
-        return np.transpose(mu_betadivmin(V.T, U.T, data.T, beta))
+        return tl.transpose(mu_betadivmin(V.T, U.T, data.T, beta))
     else:
         raise err.InvalidArgumentValue(f"Invalid value for matrix: got {matrix}, but it must be 'U' or 'W' for the first matrix, and 'V' or 'H' for the second one.") from None
 
@@ -79,22 +82,22 @@ def mu_betadivmin(U, V, M, beta):
     if beta < 0:
         raise err.InvalidArgumentValue("Invalid value for beta: negative one.") from None
 
-    K = np.dot(U,V)
+    K = tl.dot(U,V)
 
     if beta == 1:
         K_inverted = K**(-1)
-        line = np.sum(V.T,axis=0)
-        denom = np.array([line for i in range(np.shape(K)[0])])
-        return np.maximum(U * (np.dot((K_inverted*M),V.T) / denom),epsilon)
+        line = tl.sum(V.T,axis=0)
+        denom = tl.tensor([line for i in range(tl.shape(K)[0])])
+        return tl.clip(U * (tl.dot((K_inverted*M),V.T) / denom),a_min=epsilon)
     elif beta == 2:
-        denom = np.dot(K,V.T)
-        return np.maximum(U * (np.dot(M,V.T) / denom), epsilon)
+        denom = tl.dot(K,V.T)
+        return tl.clip(U * (tl.dot(M,V.T) / denom), a_min=epsilon)
     elif beta == 3:
-        denom = np.dot(K**2,V.T)
-        return np.maximum(U * (np.dot((K * M),V.T) / denom) ** gamma_beta(beta), epsilon)
+        denom = tl.dot(K**2,V.T)
+        return tl.clip(U * (tl.dot((K * M),V.T) / denom) ** gamma_beta(beta), a_min=epsilon)
     else:
-        denom = np.dot(K**(beta-1),V.T)
-        return np.maximum(U * (np.dot((K**(beta-2) * M),V.T) / denom) ** gamma_beta(beta), epsilon)
+        denom = tl.dot(K**(beta-1),V.T)
+        return tl.clip(U * (tl.dot((K**(beta-2) * M),V.T) / denom) ** gamma_beta(beta), a_min=epsilon)
 
 def mu_tensorial(G, factors, tensor, beta):
     """
@@ -141,12 +144,12 @@ def mu_tensorial(G, factors, tensor, beta):
     K = tl.tenalg.multi_mode_dot(G,factors)
 
     if beta == 1:
-        L1 = np.ones(np.shape(K))
+        L1 = tl.ones(tl.shape(K))
         L2 = K**(-1) * tensor
 
     elif beta == 2:
         L1 = K
-        L2 = np.ones(np.shape(K)) * tensor
+        L2 = tl.ones(tl.shape(K)) * tensor
 
     elif beta == 3:
         L1 = K**2
@@ -156,12 +159,12 @@ def mu_tensorial(G, factors, tensor, beta):
         L1 = K**(beta-1)
         L2 = K**(beta-2) * tensor
 
-    return np.maximum(G * (tl.tenalg.multi_mode_dot(L2, [fac.T for fac in factors]) / tl.tenalg.multi_mode_dot(L1, [fac.T for fac in factors])) ** gamma_beta(beta) , epsilon)
+    return tl.clip(G * (tl.tenalg.multi_mode_dot(L2, [fac.T for fac in factors]) / tl.tenalg.multi_mode_dot(L1, [fac.T for fac in factors])) ** gamma_beta(beta) , a_min=epsilon)
 
 def simplex_proj_mu(data, W, H, beta, tol_update_lagrangian = 1e-6):
     # Projects H on the unit simplex, comes from 'Leplat, V., Gillis, N., & Idier, J. (2021). Multiplicative updates for NMF with β-divergences under disjoint equality constraints. SIAM Journal on Matrix Analysis and Applications, 42(2), 730-752. arXiv:2010.16223.'
     k,n = H.shape
-    Jk1 = np.ones((k, 1))
+    Jk1 = tl.ones((k, 1))
     C=(W.T@(((W@H)**(beta-2)) * data))
     D=W.T@((W@H)**(beta-1))
 
@@ -170,6 +173,6 @@ def simplex_proj_mu(data, W, H, beta, tol_update_lagrangian = 1e-6):
     lagrangian_multipliers = normalize_wh.update_lagragian_multipliers_simplex_projection(C, D, H, beta, lagrangian_multipliers_0, tol = tol_update_lagrangian, n_iter_max = 100)
     
     H = H * (C/((D-Jk1@lagrangian_multipliers.T)+epsilon))**(gamma_beta(beta))
-    H = np.maximum(H,epsilon)
+    H = tl.clip(H, a_min=epsilon)
 
     return H

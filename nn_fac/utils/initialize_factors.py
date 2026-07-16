@@ -30,6 +30,9 @@ import tensorly as tl
 from tensorly.decomposition import tucker as tl_tucker
 
 import nn_fac.utils.errors as err
+import nn_fac.utils.tensorly_additional_utils as tl_additional_utils
+
+epsilon = 1e-12
 
 # %% Main initialization functions
 def nmf_initialization(data, rank, init_type, deterministic = False, seed = 0):
@@ -38,11 +41,13 @@ def nmf_initialization(data, rank, init_type, deterministic = False, seed = 0):
             return nndsvd(data, rank)
         case "random":
             if deterministic:
-                np.random.seed(seed)
                 random.seed(seed)
+                tl_additional_utils.set_random_state(seed)
             m, n = data.shape
             U_0 = np.random.rand(m, rank)
             V_0 = np.random.rand(rank, n)
+            U_0 = tl.clip(U_0, a_min=epsilon)
+            V_0 = tl.clip(V_0, a_min=epsilon)
             return U_0, V_0
         case _:
             raise err.InvalidInitializationType("Initialization type not understood.")
@@ -53,15 +58,15 @@ def ntd_initialization(tensor, ranks, init_type, deterministic = False, seed = 0
         case "random":
             factors = []
             if deterministic:
-                np.random.seed(seed)
                 random.seed(seed)
+                tl_additional_utils.set_random_state(seed)
             for mode in range(nb_modes):
                 random_array = np.random.rand(tensor.shape[mode], ranks[mode])
                 one_factor = tl.tensor(random_array)
-                one_factor[one_factor < 1e-12] = 1e-12 # To avoid zeros
+                one_factor = tl.clip(one_factor, a_min=epsilon)
                 factors.append(one_factor)
             the_core = np.random.rand(np.prod(ranks)).reshape(tuple(ranks))
-            the_core[the_core < 1e-12] = 1e-12 # To avoid zeros
+            the_core = tl.clip(the_core, a_min=epsilon)
             core = tl.tensor(the_core)
             return core, factors
 
@@ -70,8 +75,8 @@ def ntd_initialization(tensor, ranks, init_type, deterministic = False, seed = 0
                 init_core, init_factors = tl_tucker(tensor, ranks, random_state = seed)
             else:
                 init_core, init_factors = tl_tucker(tensor, ranks)
-            factors = [tl.abs(f) + 1e-12 for f in init_factors]
-            core = tl.abs(init_core) + 1e-12
+            factors = [tl.clip(tl.abs(f), a_min=epsilon) for f in init_factors]
+            core = tl.clip(tl.abs(init_core), a_min=epsilon)
             return core, factors
 
         case "chromas": # Tucker where W is fixed to I12
@@ -87,13 +92,14 @@ def ntf_initialization(tensor, rank, init_type, deterministic = False, seed = 0)
     factors = []
 
     if deterministic:
-        np.random.seed(seed)
         random.seed(seed)
+        tl_additional_utils.set_random_state(seed)
     
     match init_type.lower():
         case "random":
             for mode in range(nb_modes):
                 factors.append(tl.tensor(np.random.rand(tensor.shape[mode], rank)))
+            factors = [tl.clip(f, a_min=epsilon) for f in factors]
             return factors
 
         case "nndsvd":
@@ -103,6 +109,7 @@ def ntf_initialization(tensor, rank, init_type, deterministic = False, seed = 0)
                 else: # Otherwise, use nndsvd on the unfolded tensor
                     current_factor, _ = nndsvd(tl.unfold(tensor, mode), rank)
                 factors.append(tl.tensor(current_factor))
+            factors = [tl.clip(f, a_min=epsilon) for f in factors]
             return factors
 
         case _:
@@ -115,8 +122,8 @@ def parafac2_initialization(tensor_slices, rank, init_type, init_with_P, determi
     D_list = []
 
     if deterministic:
-        np.random.seed(seed)
         random.seed(seed)
+        tl_additional_utils.set_random_state(seed)
 
     match init_type.lower():
         case "random":
@@ -154,6 +161,11 @@ def parafac2_initialization(tensor_slices, rank, init_type, init_with_P, determi
                     W_star_local += W_list[k]
                 W_star = np.divide(W_star_local, k)
                 P_list = None
+
+            return W_list, H, D_list, P_list, W_star
+
+        case _:
+            raise err.InvalidInitializationType("Initialization type not understood.")
 
 
 # %% Common init methods
@@ -198,9 +210,7 @@ def nndsvd(V, rank):
         else:
             W[:, i] = np.sqrt(S[i] * termn) / n_uun * uun
             H[i, :] = np.sqrt(S[i] * termn) / n_vvn * vvn.T
-    # Important, not to be stuck on zeroes
-    # W[W < 1e-12] = 1e-12 
-    # H[H < 1e-12] = 1e-12
-    W = np.maximum(W, 1e-12)
-    H = np.maximum(H, 1e-12)
+    # Important, not to be stuck on zeroes
+    W = tl.clip(W, a_min=epsilon)
+    H = tl.clip(H, a_min=epsilon)
     return W, H

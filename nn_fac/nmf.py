@@ -3,11 +3,14 @@
 Created on Tue Jun 11 15:49:25 2019
 
 @author: amarmore
+
+# Note: not tested with torch backend actually!!!! Only numpy. TODO
+
 """
 
-import numpy as np
+import random
+import tensorly as tl
 import time
-import math
 import warnings
 
 import nn_fac.update_rules.nnls as nnls
@@ -15,10 +18,12 @@ import nn_fac.update_rules.mu as mu
 import nn_fac.utils.beta_divergence as beta_div
 import nn_fac.utils.errors as err
 import nn_fac.utils.initialize_factors as init_factors
+import nn_fac.utils.tensorly_additional_utils as tl_additional_utils
 
 def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol=1e-8,
         update_rule = "hals", beta = 2,
-        sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
+        sparsity_coefficients = [None, None], fixed_modes = [False, False], normalize = [False, False],
+        update_order = "UV",
         verbose=False, return_costs=False, deterministic=False, seed=0):
     """
     ======================================
@@ -87,10 +92,14 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
         Between two succesive iterations, if the difference between 
         both cost function values is below this threshold, the algorithm stops.
         Default: 1e-8
-    update_rule: string "hals" | "mu"
+    update_rule: string "hals" | "hals_acc" | "mu"
         The chosen update rule.
-        HALS performs optimization with the euclidean norm,
-        MU performs the optimization using the $\beta$-divergence loss, 
+        HALS ("hals") performs optimization with the euclidean norm without
+        time-based acceleration.
+        Accelerated HALS ("hals_acc") uses the same update rule with a
+        timing heuristic to allow more inner iterations when precomputation
+        is relatively expensive.
+        MU ("mu") performs the optimization using the $\beta$-divergence loss, 
         which generalizes the Euclidean norm, and the Kullback-Leibler and 
         Itakura-Saito divergences.
         The chosen beta-divergence is specified with the parameter `beta`.
@@ -107,12 +116,15 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
         Default: [None, None],
     fixed_modes: List of integers (between 0 and 2)
         Has to be set not to update a factor, 0 and 1 for U and V respectively
-        Default: []
+        Default: [False, False]
     normalize: List of boolean (two)
         Indicates whether the factors need to be normalized or not.
         The normalization is a l_2 normalization on each of the rank components
         (columnwise for U, linewise for V)
         Default: [False, False]
+    update_order: string "UV" | "VU" | "WH" | "HW"
+        The order in which the factors are updated.
+        Default: "UV"
     verbose: boolean
         Indicates whether the algorithm prints the successive
         normalized cost function values or not
@@ -126,6 +138,10 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
         In details, the determinisitc condition covers the initialization 
         and the acceleration condition which is based on timing (and hence not deteministic).
         Default: False
+    seed: integer
+        The seed for the random number generator, used for the initialization
+        and the acceleration condition.
+        Default: 0
 
     Returns
     -------
@@ -178,7 +194,8 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
         warnings.warn(f"The rank is too high for the input matrix. It was set to {min_data} instead.")
 
     if deterministic:
-        np.random.seed(seed)
+        random.seed(seed)
+        tl_additional_utils.set_random_state(seed)
 
     if init.lower() == "custom":
         if U_0 is None or V_0 is None:
@@ -190,12 +207,14 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, tol
     return compute_nmf(data, rank, U_0, V_0, n_iter_max=n_iter_max, tol=tol,
                        update_rule = update_rule, beta = beta,
                        sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, normalize = normalize,
+                       update_order = update_order,
                        verbose=verbose, return_costs=return_costs, deterministic=deterministic)
 
 # Author : Jeremy Cohen, modified by Axel Marmoret
 def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
                 update_rule = "hals", beta = 2,
-                sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
+                sparsity_coefficients = [None, None], fixed_modes = [False, False], normalize = [False, False],
+                update_order = "UV",
                 verbose=False, return_costs=False, deterministic=False):
     """
     Computation of a Nonnegative matrix factorization via
@@ -221,7 +240,7 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
         Between two iterations, if the difference between 
         both cost function values is below this threshold, the algorithm stops.
         Default: 1e-8
-    update_rule: string "hals" | "mu"
+    update_rule: string "hals" | "hals_acc" | "mu"
         The chosen update rule.
         HALS performs optimization with the euclidean norm,
         MU performs the optimization using the $\beta$-divergence loss, 
@@ -247,6 +266,9 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
         The normalization is a l_2 normalization on each of the rank components
         (columnwise for U, linewise for V)
         Default: [False, False]
+    update_order: string "UV" | "VU" | "WH" | "HW"
+        The order in which the factors are updated.
+        Default: "UV"
     verbose: boolean
         Indicates whether the algorithm prints the successive
         normalized cost function values or not
@@ -260,6 +282,10 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
         In details, the determinisitc condition covers the initialization 
         and the acceleration condition which is based on timing (and hence not deteministic).
         Default: False
+    seed: integer
+        The seed for the random number generator, used for the initialization
+        and the acceleration condition.
+        Default: 0
 
     Returns
     -------
@@ -284,14 +310,14 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
     U = U_in.copy()
     V = V_in.copy()
     cost_fct_vals = []
-    norm_data = np.linalg.norm(data)
+    norm_data = tl.norm(data)
     tic = time.time()
     toc = []
 
     if sparsity_coefficients == None:
         sparsity_coefficients = [None, None]
-    if fixed_modes == None:
-        fixed_modes = []
+    if fixed_modes == None or fixed_modes == []:
+        fixed_modes = [False, False]
     if normalize == None or normalize == False:
         normalize = [False, False]
 
@@ -299,7 +325,7 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
 
         # One pass of least squares on each updated mode
         U, V, cost = one_nmf_step(data, rank, U, V, norm_data, update_rule, beta,
-                                  sparsity_coefficients, fixed_modes, normalize, deterministic)
+                                  sparsity_coefficients, fixed_modes, normalize, deterministic, update_order)
 
         toc.append(time.time() - tic)
 
@@ -324,13 +350,13 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, tol=1e-8,
             break
 
     if return_costs:
-        return np.array(U), np.array(V), cost_fct_vals, toc
+        return tl.tensor(U), tl.tensor(V), cost_fct_vals, toc
     else:
-        return np.array(U), np.array(V)
+        return tl.tensor(U), tl.tensor(V)
 
 
 def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
-                 sparsity_coefficients, fixed_modes, normalize, deterministic):
+                 sparsity_coefficients, fixed_modes, normalize, deterministic, update_order):
     """
     One pass of updates for each factor in NMF
     Update the factors by solving a nonnegative least squares problem per mode
@@ -350,7 +376,7 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
         Initial V factor, of size r*n
     norm_data: float
         The Frobenius norm of the input matrix (data)
-    update_rule: string "hals" | "mu"
+    update_rule: string "hals" | "hals_acc" | "mu"
         The chosen update rule.
         HALS performs optimization with the euclidean norm,
         MU performs the optimization using the $\beta$-divergence loss, 
@@ -384,9 +410,12 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
         The value of the cost function at this step,
         normalized by the squared norm of the original matrix.
     """
-    if update_rule not in ["hals", "mu"]:
+    # Validate the update rule.
+    # "hals" and "hals_acc" both minimise the Frobenius norm (beta=2 only);
+    # "mu" uses the beta-divergence and supports arbitrary beta.
+    if update_rule not in ["hals", "hals_acc", "mu"]:
         raise err.InvalidArgumentValue(f"Invalid update rule: {update_rule}") from None
-    if update_rule == "hals" and beta != 2:
+    if update_rule in ["hals", "hals_acc"] and beta != 2:
         raise err.InvalidArgumentValue(f"The hals is only valid for the frobenius norm, corresponding to the beta divergence with beta = 2. Here, beta was set to {beta}. To compute NMF with this value of beta, please use the mu update_rule.") from None
 
     if len(sparsity_coefficients) != 2:
@@ -396,68 +425,92 @@ def one_nmf_step(data, rank, U_in, V_in, norm_data, update_rule, beta,
     U = U_in.copy()
     V = V_in.copy()
 
-    if 0 not in fixed_modes:
-        # U update
-        
-        if update_rule == "hals":
-            # Set timer for acceleration in hals_nnls_acc
-            tic = time.time()
-    
-            # Computing cross products
-            VVt = np.dot(V,np.transpose(V))
-            VMt = np.dot(V,np.transpose(data))
-    
-            # End timer for acceleration in hals_nnls_acc
-            timer = time.time() - tic
-    
-            # Compute HALS/NNLS resolution
-            if deterministic:
-                U = np.transpose(nnls.hals_nnls_acc(VMt, VVt, np.transpose(U_in), maxiter=100, atime=timer, alpha=math.inf, delta=0.01,
-                                                sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False)[0])
-            else:
-                U = np.transpose(nnls.hals_nnls_acc(VMt, VVt, np.transpose(U_in), maxiter=100, atime=timer, alpha=0.5, delta=0.01,
-                                                sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False)[0])
-        
-        elif update_rule == "mu":
-            U = mu.switch_alternate_mu(data, U, V, beta, "U") #mu.mu_betadivmin(U, V, data, beta)
+    def U_update(data, U, V, update_rule, beta, sparsity_coefficients, normalize, deterministic):
+        match update_rule:
+            case "hals":
+                tmp_U = nnls.switch_alternate_hals(data, U, V, "U", maxiter=100, sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False, hals_inner_tol=1e-8)
 
-    if 1 not in fixed_modes:
-        # V update
+            case "hals_acc":
+                # switch_alternate_hals_acc already returns the updated factor directly
+                # (not a tuple), so no indexing is needed.
+                # U_in is used as the warm-start initialisation for the NNLS inner solver.
+                tmp_U = nnls.switch_alternate_hals_acc(data, U_in, V, "U", maxiter=100, alpha=0.5, delta=0.01,
+                                            sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero=False,
+                                            deterministic = deterministic)
+            
+            case "mu":
+                tmp_U = mu.switch_alternate_mu(data, U, V, beta, "U") #mu.mu_betadivmin(U, V, data, beta)
 
-        if update_rule == "hals":
-            # Set timer for acceleration in hals_nnls_acc
-            tic = time.time()
-    
-            # Computing cross products
-            UtU = np.dot(np.transpose(U),U)
-            UtM = np.dot(np.transpose(U),data)
-    
-            # End timer for acceleration in hals_nnls_acc
-            timer = time.time() - tic
-    
-            # Compute HALS/NNLS resolution
-            if deterministic:
-                V = nnls.hals_nnls_acc(UtM, UtU, V_in, maxiter=100, atime=timer, alpha=math.inf, delta=0.01,
-                                   sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False)[0]
-            else:
-                V = nnls.hals_nnls_acc(UtM, UtU, V_in, maxiter=100, atime=timer, alpha=0.5, delta=0.01,
-                                   sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False)[0]
-        
-        elif update_rule == "mu":
-            V = mu.switch_alternate_mu(data, U, V, beta, "V") # np.transpose(mu.mu_betadivmin(V.T, U.T, data.T, beta))
+            case _:
+                raise err.InvalidArgumentValue(f"Invalid update rule: {update_rule}") from None
 
-    sparsity_coefficients = np.where(np.array(sparsity_coefficients) == None, 0, sparsity_coefficients)
+        return tmp_U
+
+    def V_update(data, U, V, update_rule, beta, sparsity_coefficients, normalize, deterministic):
+        match update_rule:
+            case "hals":
+                # sparsity and normalize index 1 corresponds to V (index 0 is for U)
+                tmp_V = nnls.switch_alternate_hals(data, U, V, "V", maxiter=100, sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False, hals_inner_tol=1e-8)
+
+            case "hals_acc":
+                # U is the *current* fixed factor (possibly updated earlier this step);
+                # using U_in here would silently apply a stale factor.
+                tmp_V = nnls.switch_alternate_hals_acc(data, U, V, "V", maxiter=100, alpha=0.5, delta=0.01,
+                                            sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero=False,
+                                            deterministic = deterministic)
+            
+            case "mu":
+                tmp_V = mu.switch_alternate_mu(data, U, V, beta, "V")
+
+            case _:
+                raise err.InvalidArgumentValue(f"Invalid update rule: {update_rule}") from None
+
+        return tmp_V
+
+    if fixed_modes[0] and fixed_modes[1]:
+        raise err.InvalidArgumentValue("Both factors are fixed, nothing to update.")
     
-    if update_rule == "hals":
-        cost = np.linalg.norm(data-np.dot(U,V), ord='fro') ** 2 + 2 * (sparsity_coefficients[0] * np.linalg.norm(U, ord=1) + sparsity_coefficients[1] * np.linalg.norm(V, ord=1))
+    elif fixed_modes[0]:
+        # Only update V
+        V = V_update(data, U, V, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+
+    elif fixed_modes[1]:
+        # Only update U
+        U = U_update(data, U, V, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+
+    else: # None of the factors are fixed, update both U and V
+        match update_order:
+            case "UV" | "WH":
+                # U update
+                U = U_update(data, U, V, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+
+                # V update
+                V = V_update(data, U, V, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+
+            case "VU" | "HW":
+                # V update
+                V = V_update(data, U, V, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+            
+                # U update
+                U = U_update(data, U, V, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+
+            case _:
+                raise err.InvalidArgumentValue(f"Invalid update order: {update_order}. Should be 'UV', 'VU', 'WH', or 'HW'") from None
+
+    # Replace None sparsity entries with 0 for cost computation
+    sparsity_coefficients = tl.where(tl.tensor(sparsity_coefficients) == None, 0, sparsity_coefficients)
+    
+    if update_rule in ["hals", "hals_acc"]:  # Both HALS variants minimise the Frobenius norm
+        cost = tl.norm(data-tl.dot(U,V), order=2) ** 2 + 2 * (sparsity_coefficients[0] * tl.norm(U, order=1) + sparsity_coefficients[1] * tl.norm(V, order=1))
     
     elif update_rule == "mu":
-        cost = beta_div.beta_divergence(data, np.dot(U,V), beta)
+        cost = beta_div.beta_divergence(data, tl.dot(U,V), beta)
 
     #cost = cost/(norm_data**2)
     return U, V, cost
 
 if __name__ == "__main__":
+    import numpy as np
     np.random.seed(42)
     m, n, rank = 100, 200, 5
     W_0, H_0 = np.random.rand(m, rank), np.random.rand(rank, n) # Example input matrices

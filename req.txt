@@ -1,6 +1,6 @@
 NTF:
  - tensorly
- PARAFAC2:
+PARAFAC2:
  - tensorly
 NTD:
  - scipy
