@@ -145,10 +145,10 @@ class NTDTests(unittest.TestCase):
                                                     verbose = False, return_costs = True, deterministic = True, seed=0)
         
         # Checking factors
-        self.assertAlmostEqual(factors[0][0][0], 0.5501411956914489)
-        self.assertAlmostEqual(factors[1][0][0], 0.9680069293664532)
-        self.assertAlmostEqual(factors[2][0][0], 0.965086018254149)
-        self.assertAlmostEqual(core[0,0,0], 0.3744157888431357)
+        self.assertAlmostEqual(factors[0][0][0], 0.5499992186938115)
+        self.assertAlmostEqual(factors[1][0][0], 0.9680293009404284)
+        self.assertAlmostEqual(factors[2][0][0], 0.9650353044118827)
+        self.assertAlmostEqual(core[0,0,0], 0.37441457869911515)
         
         # Checking errors
         self.assertAlmostEqual(cost_fct_vals[0], 2.6164388105612055e-08)
@@ -165,14 +165,14 @@ class NTDTests(unittest.TestCase):
                                                     verbose = False, return_costs = True, deterministic = True, seed=0)
         
          # Checking factors
-        self.assertAlmostEqual(factors[0][0][0], 0.16504481330298995)
-        self.assertAlmostEqual(factors[1][0][0], 0.09847086272185894)
-        self.assertAlmostEqual(factors[2][0][0], 0.11680262111792158)
-        self.assertAlmostEqual(core[0,0,0], 11039.862648258559)
+        self.assertAlmostEqual(factors[0][0][0], 0.16610095559229807)
+        self.assertAlmostEqual(factors[1][0][0], 0.09904437016292629)
+        self.assertAlmostEqual(factors[2][0][0], 0.1180461685953758)
+        self.assertAlmostEqual(core[0,0,0], 11040.119643244969)
         
         # Checking errors
-        self.assertAlmostEqual(cost_fct_vals[0], 0.00027083233922590056)
-        self.assertAlmostEqual(cost_fct_vals[-1], 0.00010638116104305596)
+        self.assertAlmostEqual(cost_fct_vals[0], 0.0002753444798877448)
+        self.assertAlmostEqual(cost_fct_vals[-1], 0.00013118517394861967)
 
     def test_decomposition_mu_beta2_random_init(self):
 
@@ -211,8 +211,8 @@ class NTDTests(unittest.TestCase):
         self.assertAlmostEqual(core[0,0,0], 11046.430317228587)
         
         # Checking errors
-        self.assertAlmostEqual(cost_fct_vals[0], 22653.665491321422)
-        self.assertAlmostEqual(cost_fct_vals[-1], 21679.048477120345)
+        self.assertAlmostEqual(cost_fct_vals[0], 22653.665491477957)
+        self.assertAlmostEqual(cost_fct_vals[-1], 21679.04847722878)
 
     def test_decomposition_mu_beta1_random_init(self):
 

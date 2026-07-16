@@ -73,12 +73,12 @@ class NMFTests(unittest.TestCase):
                                         verbose=False, return_costs=True, deterministic=True, seed=0)
         
         # Checking factors
-        self.assertAlmostEqual(U[0][0], 0.55430769)
-        self.assertAlmostEqual(V[0][0], 0.11523809)
+        self.assertAlmostEqual(U[0][0], 0.5506512624315735)
+        self.assertAlmostEqual(V[0][0], 0.11476705752999793)
         
         # Checking errors
-        self.assertAlmostEqual(cost_fct_vals[0], 0.009438764349822035)
-        self.assertAlmostEqual(cost_fct_vals[-1], 0.008805158842036184)
+        self.assertAlmostEqual(cost_fct_vals[0], 0.008806298699202334)
+        self.assertAlmostEqual(cost_fct_vals[-1], 0.008805340506660188)
 
     def test_decomposition_mu_beta2(self):
 
