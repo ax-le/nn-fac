@@ -17,18 +17,18 @@ import nn_fac.utils.normalize_wh as normalize_wh
 
 epsilon = 1e-12
 
-def switch_alternate_mu(data, U, V, beta, matrix):
+def switch_alternate_mu(data, U, V, beta, matrix, eps=1e-12):
     """
     Encapsulates the switch between the two multiplicative update rules.
     """
     if matrix in ["U", "W"]:
-        return mu_betadivmin(U, V, data, beta)
+        return mu_betadivmin(U, V, data, beta, eps=eps)
     elif matrix in ["V", "H"]:
-        return np.transpose(mu_betadivmin(V.T, U.T, data.T, beta))
+        return np.transpose(mu_betadivmin(V.T, U.T, data.T, beta, eps=eps))
     else:
         raise err.InvalidArgumentValue(f"Invalid value for matrix: got {matrix}, but it must be 'U' or 'W' for the first matrix, and 'V' or 'H' for the second one.") from None
 
-def mu_betadivmin(U, V, M, beta):
+def mu_betadivmin(U, V, M, beta, eps=1e-12):
     """
     =====================================================
     Beta-Divergence NMF solved with Multiplicative Update
@@ -85,16 +85,16 @@ def mu_betadivmin(U, V, M, beta):
         K_inverted = K**(-1)
         line = np.sum(V.T,axis=0)
         denom = np.array([line for i in range(np.shape(K)[0])])
-        return np.maximum(U * (np.dot((K_inverted*M),V.T) / denom),epsilon)
+        return np.maximum(U * (np.dot((K_inverted*M),V.T) / denom),eps)
     elif beta == 2:
         denom = np.dot(K,V.T)
-        return np.maximum(U * (np.dot(M,V.T) / denom), epsilon)
+        return np.maximum(U * (np.dot(M,V.T) / denom), eps)
     elif beta == 3:
         denom = np.dot(K**2,V.T)
-        return np.maximum(U * (np.dot((K * M),V.T) / denom) ** gamma_beta(beta), epsilon)
+        return np.maximum(U * (np.dot((K * M),V.T) / denom) ** gamma_beta(beta), eps)
     else:
         denom = np.dot(K**(beta-1),V.T)
-        return np.maximum(U * (np.dot((K**(beta-2) * M),V.T) / denom) ** gamma_beta(beta), epsilon)
+        return np.maximum(U * (np.dot((K**(beta-2) * M),V.T) / denom) ** gamma_beta(beta), eps)
 
 def mu_tensorial(G, factors, tensor, beta):
     """
