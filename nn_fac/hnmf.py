@@ -18,7 +18,18 @@ import nn_fac.utils.beta_divergence as beta_div
 import nn_fac.utils.errors as err
 import nn_fac.utils.initialize_factors as init_factors
 
-def hnmf(data, rank, E, init = "random", S_0 = None, A_0 = None, H_0 = None, n_iter_max=100, n_stepS=100, n_stepH=100, tol=1e-8,
+# def _gaussian(mu, sg2, x):
+#     return (1/math.sqrt(2*sg2*math.pi))*math.exp(-(x-mu)**2/(2*sg2)**2)
+
+def _render_from_gaussian_params(G_params, f):
+    mus = G_params[0,:]
+    sg2 = G_params[1,:]
+    i = np.arange(f)
+    diff2 = (i[:, None] - mus[None, :])**2
+    return np.exp(-diff2 / (2 * sg2[None, :]))
+    
+
+def hnmf(data, rank, E, init = "random", S_0 = None, S_g_params = None, S_g = False, A_0 = None, H_0 = None, n_iter_max=100, n_stepS=100, n_stepH=100, tol=1e-8,
         update_rule = "hals", beta = 2,
         sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False, False],
         verbose=False, return_costs=False, deterministic=False, rev_order=False, seed=0):
@@ -192,15 +203,19 @@ def hnmf(data, rank, E, init = "random", S_0 = None, A_0 = None, H_0 = None, n_i
         f = data.shape(0)
         t = data.shape(1)
         S_0 = np.random.rand(f,rank) + 1e-12
+        if S_g:
+            if S_g_params is None :
+                S_g_params = np.ones((2,rank))
+            S_0 = _render_from_gaussian_params(S_g_params, f)
         H_0 = np.random.rand(rank,t) + 1e-12
         A_0 = np.ones((rank,rank))
 
-    return compute_hnmf(data, rank, S_0, E, A_0, H_0, n_iter_max=n_iter_max, n_stepS=n_stepS, n_stepH=n_stepH, tol=tol,
+    return compute_hnmf(data, rank, S_0, S_g_params, S_g, E, A_0, H_0, n_iter_max=n_iter_max, n_stepS=n_stepS, n_stepH=n_stepH, tol=tol,
                        update_rule = update_rule, beta = beta,
                        sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, normalize = normalize,
                        verbose=verbose, return_costs=return_costs, deterministic=deterministic, rev_order=rev_order)
 
-def compute_hnmf(data, rank, S_in, E_in, A_in, H_in, n_iter_max=100, n_stepS=100, n_stepH=100, tol=1e-8,
+def compute_hnmf(data, rank, S_in, S_g_params, S_g, E_in, A_in, H_in, n_iter_max=100, n_stepS=100, n_stepH=100, tol=1e-8,
                 update_rule = "hals", beta = 2,
                 sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False, False],
                 verbose=False, return_costs=False, deterministic=False, rev_order=False):
@@ -307,7 +322,12 @@ def compute_hnmf(data, rank, S_in, E_in, A_in, H_in, n_iter_max=100, n_stepS=100
     for iteration in range(n_iter_max):
 
         # One pass of least squares on each updated mode
-        S, H, A, cost = one_hnmf_step(data, rank, S, E, A, H, norm_data, update_rule, beta,
+        if S_g:
+            S, S_g_newparams, H, A, cost = one_hnmf_step(data, rank, S, S_g_params, S_g, E, A, H, norm_data, update_rule, beta,
+                                sparsity_coefficients, fixed_modes, normalize, deterministic, rev_order=rev_order, n_stepS=n_stepS, n_stepH=n_stepH)
+
+        else :
+            S, H, A, cost = one_hnmf_step(data, rank, S, S_g_params, S_g, E, A, H, norm_data, update_rule, beta,
                                 sparsity_coefficients, fixed_modes, normalize, deterministic, rev_order=rev_order, n_stepS=n_stepS, n_stepH=n_stepH)
 
         toc.append(time.time() - tic)
@@ -331,13 +351,16 @@ def compute_hnmf(data, rank, S_in, E_in, A_in, H_in, n_iter_max=100, n_stepS=100
             if verbose:
                 print('Converged in {} iterations.'.format(iteration))
             break
-
+    
+    if return_costs and S_g:
+        return np.array(S), S_g_newparams, np.array(H), np.array(A), cost_fct_vals, toc
     if return_costs:
         return np.array(S), np.array(H), np.array(A), cost_fct_vals, toc
-    else:
-        return np.array(S), np.array(H), np.array(A)
+    if S_g:
+        return np.array(S), S_g_newparams, np.array(H), np.array(A)
+    return np.array(S), np.array(H), np.array(A)
 
-def one_hnmf_step(data, rank, S_in, E, A_in, H_in, norm_data, update_rule, beta,
+def one_hnmf_step(data, rank, S_in, S_g_params, S_g, E, A_in, H_in, norm_data, update_rule, beta,
                  sparsity_coefficients, fixed_modes, normalize, deterministic, rev_order=False, n_stepS=100, n_stepH=100):
     """
     Adding the possibility of choosing the number of nnls steps and the order of updates
@@ -357,28 +380,50 @@ def one_hnmf_step(data, rank, S_in, E, A_in, H_in, norm_data, update_rule, beta,
 
     #V = np.random.rand(rank, len(V[0,:])) + 1e-12
 
-    def update_S(X):
+    def update_S(X, eta=10e-2, l_sc=10, l_cpm=1):
         Hp = np.dot(np.multiply(E,A),H)
         if 0 not in fixed_modes:
-            
-            if update_rule == "hals":
-                # Set timer for acceleration in hals_nnls_acc
-                tic = time.time()
-        
-                # End timer for acceleration in hals_nnls_acc
-                timer = time.time() - tic
-        
-                # Compute HALS/NNLS resolution
-                if deterministic:
-                    Y = np.transpose(nnls.hals_nnls_acc_test(np.transpose(data), np.transpose(Hp), np.transpose(X), maxiter=n_stepS, atime=timer, alpha=math.inf, delta=0.01,
-                                                    sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False, return_costs=False)[0])
-                else:
-                    Y = np.transpose(nnls.hals_nnls_acc_test(np.transpose(data), np.transpose(Hp), np.transpose(X), maxiter=n_stepS, atime=timer, alpha=0.5, delta=0.01,
-                                                    sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False, return_costs=False)[0])
-            
-            elif update_rule == "mu":
-                Y = mu.switch_alternate_mu(data, X, Hp, beta, "U") #mu.mu_betadivmin(U, V, data, beta)
+            if S_g :
+                Diff = data-np.dot(X,Hp) #X-S(E°A)H
+                f = len(data)
+                Gt = -2*np.dot(Hp,np.transpose(Diff)) #transposée de dLdS où L est la loss : norm frob de Diff.
+                mus = S_g_params[0,:]
+                sg2 = S_g_params[1,:]
+                S_g_newparams = S_g_params.copy()
+
+                #calcul des nouveaux paramètres gaussiens après descente de gradient
+                for j in range(len(mus)):
+                    mu = mus[j]
+                    Dp = X[:,j]*((np.arange(f)-mu)/sg2[j]) #colonne j (seule non nulle) de dS/dmu
+                    dLdp = np.dot(Gt[j,:],np.transpose(Dp))
+                    #print("grad mu:")
+                    #print(dLdp)
+                    S_g_newparams[0,j] = max(1e-12, mu - eta*dLdp)
+
+                #Ajout de termes de régularisation pour croissance et cpm.
+                #pour la croissance :
+                mujp1 = np.concatenate((np.array(mus[0]), mus), axis=None)
+                muj = np.concatenate((mus, np.array(0)), axis=None)
+                rj = np.maximum(0, muj-mujp1)
+
+                for j in range(len(mus)):
+                    S_g_newparams[0,j] = max(1e-12, S_g_newparams[0,j] - eta*2*l_sc*(rj[j+1]-rj[j]))
                 
+                """
+                for j in range(len(sg2)):
+                    sig = sg2[j]
+                    Dp = X[:,j]*((np.arange(f)-mus[j])**2/(2*sig**2)) #colonne j (seule non nulle) de dS/dsig
+                    dLdp = np.dot(Gt[j,:],np.transpose(Dp))
+                    #print("grad sig:")
+                    #print(dLdp)
+                    S_g_newparams[1,j] = max(1e-12, sig - eta*dLdp)
+                #S_g_newparams[1,:] = sg2
+                """
+
+                print("Updated gaussian parameters :")
+                print(S_g_newparams[0,:])
+                Y = _render_from_gaussian_params(S_g_newparams, len(data))
+
                 if normalize[0]:
                     n, _ = np.shape(data)
                     _, r = np.shape(Y)
@@ -390,33 +435,67 @@ def one_hnmf_step(data, rank, S_in, E, A_in, H_in, norm_data, update_rule, beta,
                             sqrt_n = 1/n ** (1/2)
                             Y[:,k] = [sqrt_n for _ in range(n)]
                             #assert False
-            """
-            Y = mu.switch_alternate_mu(data, X, Hp, beta, "U", eps=0)
-            if normalize[0]:
-                n, _ = np.shape(data)
-                _, r = np.shape(Y)
-                for k in range(r):
-                    norm = np.linalg.norm(Y[:,k])
-                    if norm != 0:
-                        Y[:,k] /= norm
+
+                return Y, S_g_newparams
+            else :
+                if update_rule == "hals":
+                    # Set timer for acceleration in hals_nnls_acc
+                    tic = time.time()
+            
+                    # End timer for acceleration in hals_nnls_acc
+                    timer = time.time() - tic
+            
+                    # Compute HALS/NNLS resolution
+                    if deterministic:
+                        Y = np.transpose(nnls.hals_nnls_acc_test(np.transpose(data), np.transpose(Hp), np.transpose(X), maxiter=n_stepS, atime=timer, alpha=math.inf, delta=0.01,
+                                                        sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False, return_costs=False)[0])
                     else:
-                        sqrt_n = 1/n ** (1/2)
-                        Y[:,k] = [sqrt_n for _ in range(n)]
-                        #assert False
-            """
-            """
-            S_id_cqt_Bpo36_allnotes = np.zeros((288,88))
-            bin = 0
-            for note in range(88):
-                S_id_cqt_Bpo36_allnotes[bin,note] = 1.0
-                S_id_cqt_Bpo36_allnotes[bin+1,note] = 1.0
-                S_id_cqt_Bpo36_allnotes[bin+2,note] = 1.0
-                bin += 3
-            Y += 1e-12
-            Y = np.multiply(Y, S_id_cqt_Bpo36_allnotes)
-            """
-            return Y #/np.max(Y)
+                        Y = np.transpose(nnls.hals_nnls_acc_test(np.transpose(data), np.transpose(Hp), np.transpose(X), maxiter=n_stepS, atime=timer, alpha=0.5, delta=0.01,
+                                                        sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False, return_costs=False)[0])
+                
+                elif update_rule == "mu":
+                    Y = mu.switch_alternate_mu(data, X, Hp, beta, "U") #mu.mu_betadivmin(U, V, data, beta)
+                    
+                    if normalize[0]:
+                        n, _ = np.shape(data)
+                        _, r = np.shape(Y)
+                        for k in range(r):
+                            norm = np.linalg.norm(Y[:,k])
+                            if norm != 0:
+                                Y[:,k] /= norm
+                            else:
+                                sqrt_n = 1/n ** (1/2)
+                                Y[:,k] = [sqrt_n for _ in range(n)]
+                                #assert False
+                """
+                Y = mu.switch_alternate_mu(data, X, Hp, beta, "U", eps=0)
+                if normalize[0]:
+                    n, _ = np.shape(data)
+                    _, r = np.shape(Y)
+                    for k in range(r):
+                        norm = np.linalg.norm(Y[:,k])
+                        if norm != 0:
+                            Y[:,k] /= norm
+                        else:
+                            sqrt_n = 1/n ** (1/2)
+                            Y[:,k] = [sqrt_n for _ in range(n)]
+                            #assert False
+                """
+                """
+                S_id_cqt_Bpo36_allnotes = np.zeros((288,88))
+                bin = 0
+                for note in range(88):
+                    S_id_cqt_Bpo36_allnotes[bin,note] = 1.0
+                    S_id_cqt_Bpo36_allnotes[bin+1,note] = 1.0
+                    S_id_cqt_Bpo36_allnotes[bin+2,note] = 1.0
+                    bin += 3
+                Y += 1e-12
+                Y = np.multiply(Y, S_id_cqt_Bpo36_allnotes)
+                """
+                return Y #/np.max(Y)
         else :
+            if S_g:
+                return X, None
             return X
     
     def update_H(X):
@@ -495,11 +574,17 @@ def one_hnmf_step(data, rank, S_in, E, A_in, H_in, norm_data, update_rule, beta,
     
     if rev_order:
         H = update_H(H)
-        S = update_S(S)
+        if S_g:
+            S, S_g_nparams = update_S(S)
+        else:
+            S = update_S(S)
         A = update_A(A)
     
     else :
-        S = update_S(S)
+        if S_g:
+            S, S_g_nparams = update_S(S)
+        else:
+            S = update_S(S)
         H = update_H(H)
         A = update_A(A)
     
@@ -514,6 +599,9 @@ def one_hnmf_step(data, rank, S_in, E, A_in, H_in, norm_data, update_rule, beta,
         cost = beta_div.beta_divergence(data, np.dot(np.dot(S,np.multiply(E,A)),H), beta)
 
     #cost = cost/(norm_data**2
+    if S_g:
+        return S, S_g_nparams, H, A, cost
+    
     return S, H, A, cost
 
 if __name__ == "__main__":
