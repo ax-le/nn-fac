@@ -20,28 +20,29 @@ import nn_fac.utils.errors as err
 import nn_fac.utils.initialize_factors as init_factors
 import nn_fac.utils.tensorly_additional_utils as tl_additional_utils
 
-def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, n_stepU=100, n_stepV=100, tol=1e-8,
+def hnmf(data, rank, E, init = "random", S_0 = None, A_0 = None, V_0 = None, n_iter_max=100, n_stepS=100, n_stepV=100, tol=1e-8,
         update_rule = "hals", beta = 2,
-        sparsity_coefficients = [None, None], fixed_modes = [False, False], normalize = [False, False],
-        update_order = "UV",
+        sparsity_coefficients = [None, None, None], fixed_modes = [False, False, False], normalize = [False, False, False],
+        update_order = "SV",
         verbose=False, return_costs=False, deterministic=False, seed=0):
     """
     ======================================
-    Nonnegative Matrix Factorization (NMF)
+    Harmonic Nonnegative Matrix Factorization (HNMF)
     ======================================
 
-    Factorization of a matrix M in two nonnegative matrices U and V,
-    such that the product UV approximates M.
-    If M is of size m*n, U and V are respectively of size m*r and r*n,
+    Factorization of a matrix M in four nonnegative matrices S, A, E and V,
+    such that the product S(E°A)V approximates M.
+    If M is of size m*n, S, E, A and V are respectively of size m*r, r*r, r*r and r*n,
     r being the rank of the decomposition (parameter)
     Typically, this method is used as a dimensionality reduction technique,
-    or for source separation.
+    or for source separation with musical applications.
 
     The objective function is:
 
-        d(M - UV)_{\beta}
-        + sparsity_coefficients[0] * (\sum\limits_{j = 0}^{r}||U[:,k]||_1)
-        + sparsity_coefficients[1] * (\sum\limits_{j = 0}^{r}||V[k,:]||_1)
+        d(M - S(E°A)V)_{\beta}
+        + sparsity_coefficients[0] * (\sum\limits_{j = 0}^{r}||S[:,k]||_1)
+        + sparsity_coefficients[1] * (\sum\limits_{j = 0}^{r}||A[:,k]||_1)
+        + sparsity_coefficients[2] * (\sum\limits_{j = 0}^{r}||V[k,:]||_1)
 
     With:
 
@@ -78,8 +79,11 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, n_s
         - If set to custom:
             U_0 and V_0 (see below) will be used for the initialization
         Default: random
-    U_0: None or array of nonnegative floats
-        A custom initialization of U, used only in "custom" init mode.
+    S_0: None or array of nonnegative floats
+        A custom initialization of S, used only in "custom" init mode.
+        Default: None
+    A_0: None or array of nonnegative floats
+        A custom initialization of A, used only in "custom" init mode.
         Default: None
     V_0: None or array of nonnegative floats
         A custom initialization of V, used only in "custom" init mode.
@@ -87,8 +91,8 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, n_s
     n_iter_max: integer
         The maximal number of iteration before stopping the algorithm
         Default: 100
-    n_stepU: integer
-        The maximal number of iteration in the HALS update for the U matrix if the update rule is HALS.
+    n_stepS: integer
+        The maximal number of iteration in the HALS update for the S matrix if the update rule is HALS.
         Default: 100
     n_stepV: integer
         The maximal number of iteration in the HALS update for the V matrix if the update rule is HALS.
@@ -116,20 +120,20 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, n_s
         1 - Kullback-Leibler divergence
         0 - Itakura-Saito divergence
         Default: 2
-    sparsity_coefficients: List of float (two)
-        The sparsity coefficients on U and V respectively.
+    sparsity_coefficients: List of float (three)
+        The sparsity coefficients on S, A and V respectively.
         If set to None, the algorithm is computed without sparsity
-        Default: [None, None],
-    fixed_modes: List of integers (between 0 and 2)
-        Has to be set not to update a factor, 0 and 1 for U and V respectively
-        Default: [False, False]
-    normalize: List of boolean (two)
+        Default: [None, None, None],
+    fixed_modes: List of integers (between 0 and 2 included)
+        Has to be set not to update a factor, 0, 1 and 2 for S, A and V respectively
+        Default: [False, False, False]
+    normalize: List of boolean (three)
         Indicates whether the factors need to be normalized or not.
         The normalization is a l_2 normalization on each of the rank components
-        (columnwise for U, linewise for V)
+        (columnwise for S and A, linewise for V)
         Default: [False, False]
-    update_order: string "UV" | "VU" | "WH" | "HW"
-        The order in which the factors are updated.
+    update_order: string "SV" | "VS" | "SH" | "HS"
+        The order in which the factors are updated. A is always updated last as a convention.
         Default: "UV"
     verbose: boolean
         Indicates whether the algorithm prints the successive
@@ -151,8 +155,8 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, n_s
 
     Returns
     -------
-    U, V: numpy arrays
-        Factors of the NMF
+    S, A, V: numpy arrays
+        Factors of the HNMF
     cost_fct_vals: list
         A list of the normalized cost function values, for every iteration of the algorithm.
     toc: list
@@ -163,13 +167,15 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, n_s
     >>> import numpy as np
     >>> from nn_fac import nmf
     >>> rank = 5
-    >>> U_lines = 100
+    >>> S_lines = 100
     >>> V_col = 125
-    >>> U_0 = np.random.rand(U_lines, rank)
+    >>> S_0 = np.random.rand(U_lines, rank)
+    >>> A_0 = np.random.rand(rank, rank)
+    >>> E = np.ones((rank, rank))
     >>> V_0 = np.random.rand(rank, V_col)
-    >>> M = U_0@V_0
-    >>> U, V = nmf.nmf(M, rank, init = "random", n_iter_max = 500, tol = 1e-8,
-               sparsity_coefficients = [None, None], fixed_modes = [], normalize = [False, False],
+    >>> M = S_0@(np.multiply(A,E))@V_0
+    >>> S, A, V = hnmf.hnmf(M, rank, E, init = "random", n_iter_max = 500, tol = 1e-8,
+               sparsity_coefficients = [None, None, None], fixed_modes = [], normalize = [False, False, False],
                verbose=True, return_costs = False)
 
     References
@@ -204,23 +210,23 @@ def nmf(data, rank, init = "random", U_0 = None, V_0 = None, n_iter_max=100, n_s
         tl_additional_utils.set_random_state(seed)
 
     if init.lower() == "custom":
-        if U_0 is None or V_0 is None:
+        if S_0 is None or A_0 is None or V_0 is None:
             raise err.CustomNotValidFactors("Custom initialization, but (at least) one factor is set to 'None'")
         
     else:
-        U_0, V_0 = init_factors.nmf_initialization(data, rank, init, deterministic=deterministic, seed=seed)
+        S_0, A_0, V_0 = init_factors.hnmf_initialization(data, rank, E, init, deterministic=deterministic, seed=seed)
 
-    return compute_nmf(data, rank, U_0, V_0, n_iter_max=n_iter_max, n_stepU=n_stepU, n_stepV=n_stepV, tol=tol,
+    return compute_hnmf(data, rank, E, S_0, A_0, V_0, n_iter_max=n_iter_max, n_stepS=n_stepS, n_stepV=n_stepV, tol=tol,
                        update_rule = update_rule, beta = beta,
                        sparsity_coefficients = sparsity_coefficients, fixed_modes = fixed_modes, normalize = normalize,
                        update_order = update_order,
                        verbose=verbose, return_costs=return_costs, deterministic=deterministic)
 
-# Author : Jeremy Cohen, modified by Axel Marmoret
-def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, n_stepU=100, n_stepV=100, tol=1e-8,
+# Author : Jeremy Cohen, modified by Axel Marmoret and Baptiste Hilaire
+def compute_hnmf(data, rank, E, S_in, A_in, V_in, n_iter_max=100, n_stepS=100, n_stepV=100, tol=1e-8,
                 update_rule = "hals", beta = 2,
-                sparsity_coefficients = [None, None], fixed_modes = [False, False], normalize = [False, False],
-                update_order = "UV",
+                sparsity_coefficients = [None, None, None], fixed_modes = [False, False, False], normalize = [False, False, False],
+                update_order = "SV",
                 verbose=False, return_costs=False, deterministic=False):
     """
     Computation of a Nonnegative matrix factorization via
@@ -234,15 +240,19 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, n_stepU=100, n_stepV=100
         The matrix M, which is factorized, of size m*n
     rank: integer
         The rank of the decomposition
-    U_in: array of floats
-        Initial U factor, of size m*r
+    E: array of ints
+        Matrix of harmonic relations
+    S_in: array of floats
+        Initial S factor, of size m*r
+    A_in: array of floats
+        Initial A factor, of size r*r   
     V_in: array of floats
         Initial V factor, of size r*n
     n_iter_max: integer
         The maximal number of iteration before stopping the algorithm
         Default: 100
-    n_stepU: integer
-        The maximal number of iteration in the HALS update for the U matrix if the update rule is HALS.
+    n_stepS: integer
+        The maximal number of iteration in the HALS update for the S matrix if the update rule is HALS.
         Default: 100
     n_stepV: integer
         The maximal number of iteration in the HALS update for the V matrix if the update rule is HALS.
@@ -266,21 +276,21 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, n_stepU=100, n_stepV=100
         1 - Kullback-Leibler divergence
         0 - Itakura-Saito divergence
         Default: 2
-    sparsity_coefficients: List of float (two)
-        The sparsity coefficients on U and V respectively.
+    sparsity_coefficients: List of float (three)
+        The sparsity coefficients on S, A and V respectively.
         If set to None, the algorithm is computed without sparsity
-        Default: [None, None],
+        Default: [None, None, None],
     fixed_modes: List of integers (between 0 and 2)
-        Has to be set not to update a factor, 0 and 1 for U and V respectively
+        Has to be set not to update a factor, 0, 1 and 2 for S, A and V respectively
         Default: []
-    normalize: List of boolean (two)
+    normalize: List of boolean (three)
         Indicates whether the factors need to be normalized or not.
         The normalization is a l_2 normalization on each of the rank components
-        (columnwise for U, linewise for V)
-        Default: [False, False]
-    update_order: string "UV" | "VU" | "WH" | "HW"
+        (columnwise for S and A, linewise for V)
+        Default: [False, False, False]
+    update_order: string "SV" | "VS" | "SH" | "HS"
         The order in which the factors are updated.
-        Default: "UV"
+        Default: "SV"
     verbose: boolean
         Indicates whether the algorithm prints the successive
         normalized cost function values or not
@@ -301,8 +311,8 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, n_stepU=100, n_stepV=100
 
     Returns
     -------
-    U, V: numpy arrays
-        Factors of the NMF
+    S, A, V: numpy arrays
+        Factors of the HNMF
     cost_fct_vals: list
         A list of the normalized cost function values, for every iteration of the algorithm.
     toc: list
@@ -319,7 +329,8 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, n_stepU=100, n_stepV=100
     Neural computation, 23(9), 2421-2456.
     """
     # initialisation
-    U = U_in.copy()
+    S = S_in.copy()
+    A = A_in.copy()
     V = V_in.copy()
     cost_fct_vals = []
     norm_data = tl.norm(data)
@@ -327,16 +338,16 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, n_stepU=100, n_stepV=100
     toc = []
 
     if sparsity_coefficients == None:
-        sparsity_coefficients = [None, None]
+        sparsity_coefficients = [None, None, None]
     if fixed_modes == None or fixed_modes == []:
-        fixed_modes = [False, False]
+        fixed_modes = [False, False, False]
     if normalize == None or normalize == False:
-        normalize = [False, False]
+        normalize = [False, False, False]
 
     for iteration in range(n_iter_max):
 
         # One pass of least squares on each updated mode
-        U, V, cost = one_nmf_step(data, rank, U, V, n_stepU, n_stepV, norm_data, update_rule, beta,
+        S, A, V, cost = one_hnmf_step(data, rank, E, S, A, V, n_stepS, n_stepV, norm_data, update_rule, beta,
                                   sparsity_coefficients, fixed_modes, normalize, deterministic, update_order)
 
         toc.append(time.time() - tic)
@@ -362,12 +373,12 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, n_stepU=100, n_stepV=100
             break
 
     if return_costs:
-        return tl.tensor(U), tl.tensor(V), cost_fct_vals, toc
+        return tl.tensor(S), tl.tensor(A), tl.tensor(V), cost_fct_vals, toc
     else:
-        return tl.tensor(U), tl.tensor(V)
+        return tl.tensor(S), tl.tensor(A), tl.tensor(V)
 
 
-def one_nmf_step(data, rank, U_in, V_in, n_stepU, n_stepV, norm_data, update_rule, beta,
+def one_hnmf_step(data, rank, E, S_in, A_in, V_in, n_stepS, n_stepV, norm_data, update_rule, beta,
                  sparsity_coefficients, fixed_modes, normalize, deterministic, update_order):
     """
     One pass of updates for each factor in NMF
@@ -382,12 +393,14 @@ def one_nmf_step(data, rank, U_in, V_in, n_stepU, n_stepV, norm_data, update_rul
         The matrix M, which is factorized, of size m*n
     rank: integer
         The rank of the decomposition
-    U_in: array of floats
-        Initial U factor, of size m*r
+    S_in: array of floats
+        Initial S factor, of size m*r
+    A_in: array of floats
+        Initial A factor, of size r*r
     V_in: array of floats
         Initial V factor, of size r*n
-    n_stepU: integer
-        The maximal number of iteration in the HALS update for the U matrix if the update rule is HALS.
+    n_stepS: integer
+        The maximal number of iteration in the HALS update for the S matrix if the update rule is HALS.
     n_stepV: integer
         The maximal number of iteration in the HALS update for the V matrix if the update rule is HALS.
     norm_data: float
@@ -404,15 +417,15 @@ def one_nmf_step(data, rank, U_in, V_in, n_stepU, n_stepV, norm_data, update_rul
         2 - Euclidean norm
         1 - Kullback-Leibler divergence
         0 - Itakura-Saito divergence
-    sparsity_coefficients: List of float (two)
-        The sparsity coefficients on U and V respectively.
+    sparsity_coefficients: List of float (three)
+        The sparsity coefficients on S, A and V respectively.
         If set to None, the algorithm is computed without sparsity
     fixed_modes: List of integers (between 0 and 2)
-        Has to be set not to update a factor, 0 and 1 for U and V respectively
-    normalize: List of boolean (two)
+        Has to be set not to update a factor, 0, 1 and 2 for S, A and V respectively
+    normalize: List of boolean (three)
         A boolean whereas the factors need to be normalized.
         The normalization is a l_2 normalization on each of the rank components
-        (columnwise for U, linewise for V)
+        (columnwise for S and A, linewise for V)
     deterministic: boolean
         Whether or not the NMF should be computed determinstically (True) or not (False).
         In details, the determinisitc condition covers the initialization 
@@ -420,7 +433,7 @@ def one_nmf_step(data, rank, U_in, V_in, n_stepU, n_stepV, norm_data, update_rul
 
     Returns
     -------
-    U, V: numpy arrays
+    S, A, V: numpy arrays
         Factors of the NMF
     cost_fct_val:
         The value of the cost function at this step,
@@ -438,105 +451,157 @@ def one_nmf_step(data, rank, U_in, V_in, n_stepU, n_stepV, norm_data, update_rul
         raise ValueError("NMF needs 2 sparsity coefficients to be performed")
 
     # Copy
-    U = U_in.copy()
+    S = S_in.copy()
+    A = A_in.copy()
     V = V_in.copy()
 
-    def U_update(data, U, V, n_iter, update_rule, beta, sparsity_coefficients, normalize, deterministic):
+    def S_update(data, E, S, A, V, n_iter, update_rule, beta, sparsity_coefficients, normalize, deterministic):
         match update_rule:
             case "hals":
-                tmp_U = nnls.switch_alternate_hals(data, U, V, "U", maxiter=n_iter, sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False, hals_inner_tol=1e-8)
+                tmp_S = nnls.switch_alternate_hals(data, S, (np.multiply(E,A)@V), "U", maxiter=n_iter, sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False, hals_inner_tol=1e-8)
 
             case "hals_acc":
                 # switch_alternate_hals_acc already returns the updated factor directly
                 # (not a tuple), so no indexing is needed.
                 # U_in is used as the warm-start initialisation for the NNLS inner solver.
-                tmp_U = nnls.switch_alternate_hals_acc(data, U_in, V, "U", maxiter=n_iter, alpha=0.5, delta=0.01,
+                tmp_S = nnls.switch_alternate_hals_acc(data, S_in, (np.multiply(E,A)@V), "U", maxiter=n_iter, alpha=0.5, delta=0.01,
                                             sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero=False,
                                             deterministic = deterministic)
             
             case "mu":
-                tmp_U = mu.switch_alternate_mu(data, U, V, beta, "U") #mu.mu_betadivmin(U, V, data, beta)
+                tmp_S = mu.switch_alternate_mu(data, S, (np.multiply(E,A)@V), beta, "U") #mu.mu_betadivmin(U, V, data, beta)
 
             case _:
                 raise err.InvalidArgumentValue(f"Invalid update rule: {update_rule}") from None
 
-        return tmp_U
+        return tmp_S
 
-    def V_update(data, U, V, n_iter, update_rule, beta, sparsity_coefficients, normalize, deterministic):
+    def V_update(data, E, S, A, V, n_iter, update_rule, beta, sparsity_coefficients, normalize, deterministic):
         match update_rule:
             case "hals":
                 # sparsity and normalize index 1 corresponds to V (index 0 is for U)
-                tmp_V = nnls.switch_alternate_hals(data, U, V, "V", maxiter=n_iter, sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero = False, hals_inner_tol=1e-8)
+                tmp_V = nnls.switch_alternate_hals(data, (S@(np.multiply(E,A))), V, "V", maxiter=n_iter, sparsity_coefficient = sparsity_coefficients[2], normalize = normalize[2], nonzero = False, hals_inner_tol=1e-8)
 
             case "hals_acc":
                 # U is the *current* fixed factor (possibly updated earlier this step);
                 # using U_in here would silently apply a stale factor.
-                tmp_V = nnls.switch_alternate_hals_acc(data, U, V, "V", maxiter=n_iter, alpha=0.5, delta=0.01,
-                                            sparsity_coefficient = sparsity_coefficients[1], normalize = normalize[1], nonzero=False,
+                tmp_V = nnls.switch_alternate_hals_acc(data, (S@(np.multiply(E,A))), V, "V", maxiter=n_iter, alpha=0.5, delta=0.01,
+                                            sparsity_coefficient = sparsity_coefficients[2], normalize = normalize[2], nonzero=False,
                                             deterministic = deterministic)
             
             case "mu":
-                tmp_V = mu.switch_alternate_mu(data, U, V, beta, "V")
+                tmp_V = mu.switch_alternate_mu(data, (S@(np.multiply(E,A))), V, beta, "V")
 
             case _:
                 raise err.InvalidArgumentValue(f"Invalid update rule: {update_rule}") from None
 
         return tmp_V
 
-    if fixed_modes[0] and fixed_modes[1]:
-        raise err.InvalidArgumentValue("Both factors are fixed, nothing to update.")
+    def A_update(data, E, S, A, V, sparsity_coefficients, normalize, l2_p=True):
+
+        tmp_A = A
+
+        #Only a multiplicative update is implemented for now
+        StDVt = E * np.dot(np.transpose(S), np.dot(data, np.transpose(V)))
+        #WARNING : the numerator and denominator are multiplied pointwise by E, which is sparse. The simplification can only occur for elements where E
+        #is nonnegative.
+        StS = np.dot(np.transpose(S),S)
+        VVt = np.dot(H,np.transpose(V))
+        ApE = np.multiply(tmp_A,E)
+        Denom = E * np.dot(StS, np.dot(ApE, VVt))
+        if l2_p: #adding l2 norm penalty
+            Denom += 2*tmp_A 
+        not_fonda_mask = ((np.ones((rank,rank)) - np.identity(rank)) != 0)
+
+        non_zero_mask = ((np.multiply(Denom, ApE)) != 0) #Update where E and A, but also the denominator are not zero.
+
+        ##we remove the diagonal from the A values to update :
+        #mask = np.logical_and(not_fonda_mask, not_zero_mask)
+
+        frac = np.ones((rank,rank))
+        np.divide(StDVt, Denom, out=frac, where=non_zero_mask) #MUR style ; problem is there might be some zeros in the denom since E is very sparse
+        tmp_A = np.maximum(1e-12, np.multiply(tmp_A, frac, out=A.copy(), where=not_fonda_mask))
+        #Y = np.maximum(0, X - eta*(Denom - StDHt))                    #Gradient descent classic + projection to keep positive constraint up.
+
+        if normalize[1]:
+            for k in range(rank):
+                norm = np.linalg.norm(tmp_A[:,k])
+                if norm != 0:
+                    tmp_A[:,k] /= norm
+                else:
+                    sqrt_n = 1/rank ** (1/2)
+                    tmp_A[:,k] = [sqrt_n for _ in range(rank)]
+
+        return tmp_A
+
+    if fixed_modes[0] and fixed_modes[1] and fixed_modes[2]:
+        raise err.InvalidArgumentValue("All factors are fixed, nothing to update.")
+    
+    elif fixed_modes[0] and fixed_modes[1]:
+        # Only update V
+        V = V_update(data, E, S, A, V, n_stepV, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+
+    elif fixed_modes[1] and fixed_modes[2]:
+        # Only update U
+        S = S_update(data, E, S, A, V, n_stepS, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+    
+    elif fixed_modes[0] and fixed_modes[2]:
+        # Only update A
+        A = A_update(data, E, S, A, V, sparsity_coefficients, normalize, l2_p=True)
     
     elif fixed_modes[0]:
-        # Only update V
-        V = V_update(data, U, V, n_stepV, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+        V = V_update(data, E, S, A, V, n_stepV, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+        A = A_update(data, E, S, A, V, sparsity_coefficients, normalize, l2_p=True)
 
-    elif fixed_modes[1]:
-        # Only update U
-        U = U_update(data, U, V, n_stepU, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+    elif fixed_modes[2]:
+        S = S_update(data, E, S, A, V, n_stepS, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+        A = A_update(data, E, S, A, V, sparsity_coefficients, normalize, l2_p=True)
 
-    else: # None of the factors are fixed, update both U and V
+    else:
         match update_order:
-            case "UV" | "WH":
-                # U update
-                U = U_update(data, U, V, n_stepU, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+            case "SV" | "SH":
+                # S update
+                S = S_update(data, E, S, A, V, n_stepS, update_rule, beta, sparsity_coefficients, normalize, deterministic)
 
                 # V update
-                V = V_update(data, U, V, n_stepV, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+                V = V_update(data, E, S, A, V, n_stepV, update_rule, beta, sparsity_coefficients, normalize, deterministic)
 
-            case "VU" | "HW":
+            case "VS" | "HS":
                 # V update
-                V = V_update(data, U, V, n_stepV, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+                V = V_update(data, E, S, A, V, n_stepV, update_rule, beta, sparsity_coefficients, normalize, deterministic)
             
-                # U update
-                U = U_update(data, U, V, n_stepU, update_rule, beta, sparsity_coefficients, normalize, deterministic)
+                # S update
+                S = S_update(data, E, S, A, V, n_stepS, update_rule, beta, sparsity_coefficients, normalize, deterministic)
 
             case _:
-                raise err.InvalidArgumentValue(f"Invalid update order: {update_order}. Should be 'UV', 'VU', 'WH', or 'HW'") from None
+                raise err.InvalidArgumentValue(f"Invalid update order: {update_order}. Should be 'SV', 'VS', 'SH', or 'HS'") from None
+
+        # update A
+        if not fixed_modes[1]:
+            A = A_update(data, E, S, A, V, sparsity_coefficients, normalize, l2_p=True)
 
     # Replace None sparsity entries with 0 for cost computation
     sparsity_coefficients = tl.where(tl.tensor(sparsity_coefficients) == None, 0, sparsity_coefficients)
     
     if update_rule in ["hals", "hals_acc"]:  # Both HALS variants minimise the Frobenius norm
-        cost = tl.norm(data-tl.dot(U,V), order=2) ** 2 + 2 * (sparsity_coefficients[0] * tl.norm(U, order=1) + sparsity_coefficients[1] * tl.norm(V, order=1))
+        cost = tl.norm(data-tl.dot(tl.dot(S,E*A),V), order=2) ** 2 + 2 * (sparsity_coefficients[0] * tl.norm(S, order=1) + sparsity_coefficients[1] * tl.norm(A, order=1) + sparsity_coefficients[2] * tl.norm(V, order=1))
     
     elif update_rule == "mu":
-        cost = beta_div.beta_divergence(data, tl.dot(U,V), beta)
+        cost = beta_div.beta_divergence(data, tl.dot(tl.dot(S,E*A),V), beta)
 
     #cost = cost/(norm_data**2)
-    return U, V, cost
+    return S, A, V, cost
 
 if __name__ == "__main__":
     import numpy as np
     np.random.seed(42)
     m, n, rank = 100, 200, 5
-    W_0, H_0 = np.random.rand(m, rank), np.random.rand(rank, n) # Example input matrices
-    data = W_0@H_0 + 1e-2*np.random.rand(m,n)  # Example input matrix
+    S_0, A_0, E_0, H_0 = np.random.rand(m, rank), np.random.rand(rank, rank), np.random.rand(rank, rank), np.random.rand(rank, n) # Example input matrices
+    data = S_0@(np.multiply(A_0, E_0))@H_0 + 1e-2*np.random.rand(m,n)  # Example input matrix
     
-    W, H = nmf(data, rank, beta = 2, update_rule = "hals", n_iter_max = 100, init="random", verbose = True)
-    W, H = nmf(data, rank, beta = 2, update_rule = "hals", n_iter_max = 100, init = "nndsvd",verbose = True)
+    S, A, H = hnmf(data, rank, E_0, beta = 2, update_rule = "hals", n_iter_max = 100, init="random", verbose = True)
 
-    W, H = nmf(data, rank, beta = 1, update_rule = "mu", n_iter_max = 100, init="random", verbose = True)
-    W, H = nmf(data, rank, beta = 1, update_rule = "mu", n_iter_max = 100, init = "nndsvd",verbose = True)
+    S, A, H = hnmf(data, rank, E_0, beta = 1, update_rule = "mu", n_iter_max = 100, init="random", verbose = True)
 
-    W, H = nmf(data, rank, beta = 0, update_rule = "mu", n_iter_max = 100, init="random", verbose = True)
-    W, H = nmf(data, rank, beta = 0, update_rule = "mu", n_iter_max = 100, init = "nndsvd",verbose = True)
+    S, A, H = hnmf(data, rank, E_0, beta = 0, update_rule = "mu", n_iter_max = 100, init="random", verbose = True)
+  

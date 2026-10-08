@@ -51,6 +51,25 @@ def nmf_initialization(data, rank, init_type, deterministic = False, seed = 0):
             return U_0, V_0
         case _:
             raise err.InvalidInitializationType("Initialization type not understood.")
+
+def hnmf_initialization(data, rank, E, init_type, deterministic = False, seed = 0):
+    match init_type.lower():
+        case "nndsvd":
+            raise err.InvalidInitializationType("nndsvd is not supported for harmonic nmf for now.")
+        case "random":
+            if deterministic:
+                random.seed(seed)
+                tl_additional_utils.set_random_state(seed)
+            m, n = data.shape
+            S_0 = np.random.rand(m, rank)
+            A_0 = np.random.rand(rank, rank)
+            V_0 = np.random.rand(rank, n)
+            S_0 = tl.clip(S_0, a_min=epsilon)
+            A_0 = tl.clip(A_0, a_min=epsilon)
+            V_0 = tl.clip(V_0, a_min=epsilon)
+            return S_0, A_0, V_0
+        case _:
+            raise err.InvalidInitializationType("Initialization type not understood.")
         
 def ntd_initialization(tensor, ranks, init_type, deterministic = False, seed = 0):
     nb_modes = len(tensor.shape)
