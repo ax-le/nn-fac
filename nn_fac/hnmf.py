@@ -447,8 +447,8 @@ def one_hnmf_step(data, rank, E, S_in, A_in, V_in, n_stepS, n_stepV, norm_data, 
     if update_rule in ["hals", "hals_acc"] and beta != 2:
         raise err.InvalidArgumentValue(f"The hals is only valid for the frobenius norm, corresponding to the beta divergence with beta = 2. Here, beta was set to {beta}. To compute NMF with this value of beta, please use the mu update_rule.") from None
 
-    if len(sparsity_coefficients) != 2:
-        raise ValueError("NMF needs 2 sparsity coefficients to be performed")
+    if len(sparsity_coefficients) != 3:
+        raise ValueError("HNMF needs 3 sparsity coefficients to be performed")
 
     # Copy
     S = S_in.copy()
@@ -506,7 +506,7 @@ def one_hnmf_step(data, rank, E, S_in, A_in, V_in, n_stepS, n_stepV, norm_data, 
         #WARNING : the numerator and denominator are multiplied pointwise by E, which is sparse. The simplification can only occur for elements where E
         #is nonnegative.
         StS = np.dot(np.transpose(S),S)
-        VVt = np.dot(H,np.transpose(V))
+        VVt = np.dot(V,np.transpose(V))
         ApE = np.multiply(tmp_A,E)
         Denom = E * np.dot(StS, np.dot(ApE, VVt))
         if l2_p: #adding l2 norm penalty
