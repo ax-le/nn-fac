@@ -1,17 +1,19 @@
 import nn_fac.nmf as nnfacnmf
 import nn_fac.hnmf as nnfachnmf
 import numpy as np
+import tensorly as tl
 from tqdm import tqdm
 import random
 import time
 import random
 
 """
-Cascade algorithms, for now implemented for NMF and HNMF. Learns representations matrices W, or S and A over a list of data matrices, enabling for
-an inference phase where an H matrix is optimized for every data seen.
+Cascade algorithms, for now implemented for NMF and HNMF. Learns representations matrices W, or S and A over a list of data matrices (_training), enabling for
+an inference phase (_testing) where an H matrix is optimized for every data seen while keeping W or SA fixed from the learning procedure. The testing procedure
+is shared for both NMF and HNMF traing procedures since the dictionnary W or S(E°A) is fixed either way.
 """
 
-def nmf_cascade(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_stepH=100, W_init=0, n_epoch=100, 
+def nmf_cascade_training(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_stepH=100, W_init=0, n_epoch=100, 
                 verbose=False, return_costs=False, update_order="HW", sparsity_coefficients=[0.0, 0.0], fixed_modes=[], normalize=[True, False], randomize_ord=True, deterministic=True):
     """
     Parameters :
@@ -22,14 +24,16 @@ def nmf_cascade(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_stepH=100
         update_rules : list of strings for successive update rules used. If given a single rule : same is applied for all nmfs.
         n_iters : list of int for successive number of iterations in nmf computation. If given a single value : same is applied for all nmfs.
         n_stepW, n_stepH : ints for the numbers of steps in HALS updates if the update rule used is HALS.
-        spar_c : float indicating the sparsity coefficient in the update of H.
         W_init : Either 0 if W is initialised randomly, or a starting note dictionnary.
         n_epoch : int for the number of epoch of the learning phase for W.
         verbose : boolean used to indicate if the details of the nmfs computations are shown or not.
         return_costs : boolean indicating if the costs of reconstruction from the successive NMFs are returned.
         update_order : string indicating the update order of the matrices W and H at each iteration of the NMF.
+        sparsity_coefficients : The sparsity coefficients for the different matrices updated through the NMFs.
+        fixed_modes : List of ints indicating which matrices are updated or not throughout the NMFs.
+        normalize : List of booleans indicating if the matrices are normalized or not during the NMFs.
         randomize_ord : boolean indicating if the order in which the spectrograms are viewed in the training phase is randomized or not.
-        deterministic : boolean indicating if the hnmf is deterministic or not.
+        deterministic : boolean indicating if the nmfs are deterministics or not.
     
     Returns :
     ---------
@@ -105,14 +109,16 @@ def hnmf_cascade(Xs, E, rank, betas, update_rules, n_iters, n_stepS=100, n_stepH
         update_rules : list of strings for successive update rules used. If given a single rule : same is applied for all hnmfs.
         n_iters : list of int for successive number of iterations in hnmf computation. If given a single value : same is applied for all hnmfs.
         n_stepS, n_stepH : ints for the numbers of steps in HALS updates if the update rule used is HALS.
-        spar_c : float indicating the sparsity coefficient in the update of H.
         S_init : Either 0 if S is initialised randomly, or a starting fundamentals dictionnary.
         n_epoch : int for the number of epoch of the learning phase for W.
         verbose : boolean used to indicate if the details of the nmfs computations are shown or not.
         return_costs : boolean indicating if the costs of reconstruction from the successive HNMFs are returned.
         update_order : string indicating the update order of the matrices S and H at each iteration of the HNMF.
+        sparsity_coefficients : The sparsity coefficients for the different matrices updated through the HNMFs.
+        fixed_modes : List of ints indicating which matrices are updated or not throughout the HNMFs.
+        normalize : List of booleans indicating if the matrices are normalized or not during the HNMFs.
         randomize_ord : boolean indicating if the order in which the spectrograms are viewed in the training phase is randomized or not.
-        deterministic : boolean indicating if the hnmf is deterministic or not.
+        deterministic : boolean indicating if the hnmfs are deterministics or not.
     
     Returns :
     ---------
@@ -180,3 +186,59 @@ def hnmf_cascade(Xs, E, rank, betas, update_rules, n_iters, n_stepS=100, n_stepH
         return Ss, Hs, As, costs, t
     
     return Ss, Hs, As, t
+
+def nmf_cascade_testing(Xs, W_casc, rank, betas, update_rules, n_iters,  n_stepH=100, Hs_init=None,
+                verbose=False, return_costs=False, sparsity_coefficient=0.0, normalize=False, deterministic=True):
+    """
+    Parameters :
+    ------------
+        Xs : a list of arrays for the successive spectrograms.
+        W_casc : the dictionnay obtained in the training process : Ws[-1] if the nmf_cascade_training procedure was used.
+        rank : int for the rank in hnmf computations.
+        betas : list of beta values for the beta divergences used to compute the successive nmfs. If given a single beta : same is applied for all nmfs.
+        update_rules : list of strings for successive update rules used. If given a single rule : same is applied for all nmfs.
+        n_iters : list of int for successive number of iterations in nmf computation. If given a single value : same is applied for all nmfs.
+        n_stepH : int for the numbers of steps in HALS updates if the update rule used is HALS.
+        Hs_init : The list of H arrays used for nmf initializations. If None, the initializations are random.
+        verbose : boolean used to indicate if the details of the nmfs computations are shown or not.
+        return_costs : boolean indicating if the costs of reconstruction from the NMFs are returned.
+        sparsity_coefficient : the sparsity coefficient for H updates in the NMFs computed.
+        normalize : whether or not H matrices are normalized through the NMFs.
+        deterministic : boolean indicating if the nmfs are deterministics or not.
+    """
+    Hs = []
+    n_nmf = len(Xs)
+    costs = []
+
+    if type(betas) == int:
+        betas = [betas for _ in range(n_nmf)] 
+    if type(update_rules) == str:
+        update_rules = [update_rules for _ in range(n_nmf)] 
+    if type(n_iters) == int:
+        n_iters = [n_iters for _ in range(n_nmf)] 
+
+    t = time.time()
+    for i in tqdm(range(n_nmf)):
+        X = Xs[i]
+
+        if Hs_init is None:
+            H_0 = tl.random_tensor((rank, len(X[0,:]))) + 1e-12
+        else :
+            H_0 = Hs_init[i]
+
+        if return_costs:
+            _, H, c, _ = nnfacnmf.nmf(X, rank, init="custom", U_0=W_casc, V_0=H_0, n_iter_max=n_iters[i], n_stepV=n_stepH, update_rule=update_rules[i], beta=betas[i],
+                            sparsity_coefficients=[0.0, sparsity_coefficient], fixed_modes=[0], normalize=[False, normalize], verbose=verbose, return_costs=True, deterministic=deterministic)
+            Hs.append(H)
+            costs.append(c)
+        else :
+            _, H = nnfacnmf.nmf(X, rank, init="custom", U_0=W_casc, V_0=H_0, n_iter_max=n_iters[i], n_stepV=n_stepH, update_rule=update_rules[i], beta=betas[i],
+                                        sparsity_coefficients=[0.0, sparsity_coefficient], fixed_modes=[0], normalize=[False, normalize], verbose=verbose, return_costs=False, deterministic=deterministic)
+            Hs.append(H)
+
+    t = time.time() - t
+
+    if return_costs:
+        return Hs, t, costs
+    
+    return Hs, t
