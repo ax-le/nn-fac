@@ -1,4 +1,5 @@
 from . import nmf
+from . import hnmf
 from . import ntf
 from . import ntd
 from . import parafac2
@@ -8,6 +9,8 @@ from . import min_vol_nmf
 
 from . import multilayer_nmf
 from . import deep_nmf
+
+from .algorithms import cascade
 
 from .update_rules import nnls
 from .update_rules import mu

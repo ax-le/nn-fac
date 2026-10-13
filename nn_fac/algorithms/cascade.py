@@ -97,7 +97,7 @@ def nmf_cascade_training(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_
     
     return Ws,Hs,t
 
-def hnmf_cascade(Xs, E, rank, betas, update_rules, n_iters, n_stepS=100, n_stepH=100, S_init=0, n_epoch=100, 
+def hnmf_cascade_training(Xs, E, rank, betas, update_rules, n_iters, n_stepS=100, n_stepH=100, S_init=0, n_epoch=100, 
                 verbose=False, return_costs=False, update_order="HS", sparsity_coefficients=[0.0, 0.0, 0.0], fixed_modes=[0], normalize=[True, False, False], randomize_ord=True, deterministic=True):
     """
     Parameters :
@@ -222,7 +222,7 @@ def nmf_cascade_testing(Xs, W_casc, rank, betas, update_rules, n_iters,  n_stepH
         X = Xs[i]
 
         if Hs_init is None:
-            H_0 = tl.random_tensor((rank, len(X[0,:]))) + 1e-12
+            H_0 = tl.random.random_tensor((rank, len(X[0,:]))) + 1e-12
         else :
             H_0 = Hs_init[i]
 
