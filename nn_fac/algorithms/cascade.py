@@ -14,7 +14,7 @@ is shared for both NMF and HNMF traing procedures since the dictionnary W or S(E
 """
 
 def nmf_cascade_training(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_stepH=100, W_init=0, n_epoch=100, 
-                verbose=False, return_costs=False, update_order="HW", sparsity_coefficients=[0.0, 0.0], fixed_modes=[], normalize=[True, False], randomize_ord=True, deterministic=True):
+                verbose=False, return_costs=False, update_order="HW", sparsity_coefficients=[0.0, 0.0], fixed_modes=[0,0], normalize=[True, False], randomize_ord=True, deterministic=True):
     """
     Parameters :
     ------------
@@ -98,7 +98,7 @@ def nmf_cascade_training(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_
     return Ws,Hs,t
 
 def hnmf_cascade_training(Xs, E, rank, betas, update_rules, n_iters, n_stepS=100, n_stepH=100, S_init=0, n_epoch=100, 
-                verbose=False, return_costs=False, update_order="HS", sparsity_coefficients=[0.0, 0.0, 0.0], fixed_modes=[0], normalize=[True, False, False], randomize_ord=True, deterministic=True):
+                verbose=False, return_costs=False, update_order="HS", sparsity_coefficients=[0.0, 0.0, 0.0], fixed_modes=[1,0,0], normalize=[True, False, False], randomize_ord=True, deterministic=True):
     """
     Parameters :
     ------------
@@ -228,12 +228,12 @@ def nmf_cascade_testing(Xs, W_casc, rank, betas, update_rules, n_iters,  n_stepH
 
         if return_costs:
             _, H, c, _ = nnfacnmf.nmf(X, rank, init="custom", U_0=W_casc, V_0=H_0, n_iter_max=n_iters[i], n_stepV=n_stepH, update_rule=update_rules[i], beta=betas[i],
-                            sparsity_coefficients=[0.0, sparsity_coefficient], fixed_modes=[0], normalize=[False, normalize], verbose=verbose, return_costs=True, deterministic=deterministic)
+                            sparsity_coefficients=[0.0, sparsity_coefficient], fixed_modes=[1,0], normalize=[False, normalize], verbose=verbose, return_costs=True, deterministic=deterministic)
             Hs.append(H)
             costs.append(c)
         else :
             _, H = nnfacnmf.nmf(X, rank, init="custom", U_0=W_casc, V_0=H_0, n_iter_max=n_iters[i], n_stepV=n_stepH, update_rule=update_rules[i], beta=betas[i],
-                                        sparsity_coefficients=[0.0, sparsity_coefficient], fixed_modes=[0], normalize=[False, normalize], verbose=verbose, return_costs=False, deterministic=deterministic)
+                                        sparsity_coefficients=[0.0, sparsity_coefficient], fixed_modes=[1,0], normalize=[False, normalize], verbose=verbose, return_costs=False, deterministic=deterministic)
             Hs.append(H)
 
     t = time.time() - t
