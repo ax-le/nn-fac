@@ -1,5 +1,6 @@
 import nn_fac.nmf as nnfacnmf
 import nn_fac.hnmf as nnfachnmf
+import matcouply as mc
 import numpy as np
 import tensorly as tl
 from tqdm import tqdm
@@ -12,6 +13,8 @@ Cascade algorithms, for now implemented for NMF and HNMF. Learns representations
 an inference phase (_testing) where an H matrix is optimized for every data seen while keeping W or SA fixed from the learning procedure. The testing procedure
 is shared for both NMF and HNMF traing procedures since the dictionnary W or S(E°A) is fixed either way.
 """
+
+""" ----------TRAINING PROCEDURES---------- """
 
 def nmf_cascade_training(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_stepH=100, W_init=0, n_epoch=100, 
                 verbose=False, return_costs=False, update_order="HW", sparsity_coefficients=[0.0, 0.0], fixed_modes=[0,0], normalize=[True, False], randomize_ord=True, deterministic=True):
@@ -186,6 +189,9 @@ def hnmf_cascade_training(Xs, E, rank, betas, update_rules, n_iters, n_stepS=100
         return Ss, Hs, As, costs, t
     
     return Ss, Hs, As, t
+
+
+""" ---------TESTING PROCEDURES---------- """
 
 def nmf_cascade_testing(Xs, W_casc, rank, betas, update_rules, n_iters,  n_stepH=100, Hs_init=None,
                 verbose=False, return_costs=False, sparsity_coefficient=0.0, normalize=False, deterministic=True):

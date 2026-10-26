@@ -27,7 +27,7 @@ setuptools.setup(
     install_requires=[
         'numpy >= 2.0',
         'scipy >= 0.13.0',
-        'tensorly == 0.6.0',
+        'tensorly >= 0.9.0',
     ],
     python_requires='>=3.8',
 )

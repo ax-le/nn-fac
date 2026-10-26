@@ -545,9 +545,8 @@ def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
         # this line can be computed with tensor contractions
         con_modes = [i for i in range(tl.ndim(tensor)) if i != mode]
 
-        # Depending on the version of tensorly, use different version of the API
-        UtU = tl.tenalg.contract(temp, con_modes, core, con_modes) # Tensorly v0.6.0
-        # UtU = tl.tenalg.tensordot(temp, core, con_modes) # Replacing contraction because they had been removed in Tensorly v0.9.0
+        # tl.tenalg.contract was removed in Tensorly v0.9.0, replaced by tensordot (modes given as (modes1, modes2))
+        UtU = tl.tenalg.tensordot(temp, core, (con_modes, con_modes))
         #UtU = unfold(temp, mode)@tl.transpose(unfold(core, mode))
 
         # UtM
@@ -556,9 +555,8 @@ def one_ntd_step(tensor, ranks, in_core, in_factors, norm_tensor,
         # again, computable by tensor contractions
         #MtU = unfold(temp, mode)@tl.transpose(unfold(core, mode))
 
-        # Depedning on the version of tensorly, use different version of the API
-        MtU = tl.tenalg.contract(temp, con_modes, core, con_modes) # Tensorly v0.6.0
-        # MtU = tl.tenalg.tensordot(temp, core, con_modes) # Replacing contraction because they had been removed in Tensorly v0.9.0
+        # tl.tenalg.contract was removed in Tensorly v0.9.0, replaced by tensordot (modes given as (modes1, modes2))
+        MtU = tl.tenalg.tensordot(temp, core, (con_modes, con_modes))
         UtM = tl.transpose(MtU)
 
 
