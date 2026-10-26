@@ -190,7 +190,7 @@ def hnmf_cascade_training(Xs, E, rank, betas, update_rules, n_iters, n_stepS=100
     
     return Ss, Hs, As, t
 
-def pf2_cascade_training(Xs, rank, betas, updates_rules, n_iters=1000, A_0=0, B_is_0=0, n_epoch=100, C_spar_coeff=0.01,
+def pf2_cascade_training(Xs, rank, betas, n_iters=1000, A_0=0, B_is_0=0, n_epoch=100, C_spar_coeff=0.01,
                         verbose=-5, return_costs=True, randomize_ord=True, deterministic=True):
     """
     Parameters :
@@ -213,8 +213,6 @@ def pf2_cascade_training(Xs, rank, betas, updates_rules, n_iters=1000, A_0=0, B_
     
     if type(betas) == int:
             betas = [betas for _ in range(n_pf2)] 
-    if type(update_rules) == str:
-        update_rules = [update_rules for _ in range(n_pf2)] 
     if type(n_iters) == int:
         n_iters = [n_iters for _ in range(n_pf2)] 
     
