@@ -190,6 +190,125 @@ def hnmf_cascade_training(Xs, E, rank, betas, update_rules, n_iters, n_stepS=100
     
     return Ss, Hs, As, t
 
+def pf2_cascade_training(Xs, rank, betas, updates_rules, n_iters=1000, A_0=0, B_is_0=0, n_epoch=100, C_spar_coeff=0.01,
+                        verbose=-5, return_costs=True, randomize_ord=True, deterministic=True):
+    """
+    Parameters :
+    ------------
+    Returns :
+    ---------
+    """
+    n_pf2 = len(Xs)
+    B_is_s = []
+    A_s = []
+    C_s = []
+    weights_s = []
+    if deterministic:
+        seed = 0
+    else:
+        rng = np.random.default_rng()
+        seed = rng.bit_generator.seed_seq.entropy
+
+    random_state = tl.check_random_state(seed)
+    
+    if type(betas) == int:
+            betas = [betas for _ in range(n_pf2)] 
+    if type(update_rules) == str:
+        update_rules = [update_rules for _ in range(n_pf2)] 
+    if type(n_iters) == int:
+        n_iters = [n_iters for _ in range(n_pf2)] 
+    
+    t = time.time()
+    costs = [[] for _ in range(n_pf2)]
+
+    for epoch in tqdm(range(1, n_epoch+1)):
+        ind = range(n_pf2)
+        if randomize_ord:
+            ind = [i for i in range(n_pf2)]
+            random.shuffle(ind)
+        
+        for step in tqdm(ind):
+            X_reps = Xs[step]
+            n_reps = len(X_reps)
+            C_init = tl.tensor(random_state.uniform(size=(tl.shape(X_reps[0])[1], rank)))
+
+            if B_is_s == []:
+                if type(B_is_0) is int:
+                    B_is_init = [tl.tensor(random_state.uniform(size=(tl.shape(matrix)[0], rank))) for matrix in X_reps]
+                else :
+                    B_is_init = [B_is_0[i].copy() for i in range(n_reps)]
+                if type(A_0) is int:
+                    A_init = tl.tensor(random_state.uniform(size=(n_pf2, rank)))
+                else :
+                    A_init = A_0.copy()
+                weights_init = None
+            else:
+                B_is_init = [B_is_s[-1][i].copy() for i in range(n_reps)]
+                A_init = A_s[-1].copy()
+                weights_init = weights_s[-1].copy()
+            if return_costs:
+                estimated_cmf, err = mc.decomposition.cmf_aoadmm(
+                       X_reps,
+                       rank=rank,
+                       init="custom",
+                       weights_0=weights_init,
+                       A_0=A_init,
+                       B_is_0=B_is_init,
+                       C_0=C_init,
+                       n_iter_max=n_iters[step],
+                       non_negative=True,  # Constrain all components to be non-negative
+                       l1_penalty={2: C_spar_coeff},  # Sparsity on C
+                       l2_norm_bound=[1, 1, 0],  # Norm of A and B_i-component vectors less than 1
+                       parafac2=True,  # Enforce PARAFAC2 constraint
+                       #unimodal={1: True},  # Unimodality (one peak) on the B_i component vectors
+                       constant_feasibility_penalty=True,  # Must be set to apply l2_norm_penalty (row-penalty) on A. See documentation for more details
+                       verbose=verbose,  # Negative verbosity level for minimal (nonzero) printouts
+                       random_state=random_state,  # A seed can be given similar to how it's done in TensorLy
+                       return_admm_vars=False,
+                       return_errors=True
+                       )
+                   
+                est_weights, (est_A, est_B_is, est_C) = estimated_cmf
+                costs[step] = err
+                A_s.append(est_A)
+                B_is_s.append(est_B_is)
+                C_s.append(est_C)
+                weights_s.append(est_weights)
+            else:
+                estimated_cmf = mc.decomposition.cmf_aoadmm(
+                        X_reps,
+                        rank=rank,
+                        init="custom",
+                        weights_0=weights_init,
+                        A_0=A_init,
+                        B_is_0=B_is_init,
+                        C_0=C_init,
+                        n_iter_max=n_iters[step],
+                        non_negative=True,  # Constrain all components to be non-negative
+                        l1_penalty={2: C_spar_coeff},  # Sparsity on C
+                        l2_norm_bound=[1, 1, 0],  # Norm of A and B_i-component vectors less than 1
+                        parafac2=True,  # Enforce PARAFAC2 constraint
+                        #unimodal={1: True},  # Unimodality (one peak) on the B_i component vectors
+                        constant_feasibility_penalty=True,  # Must be set to apply l2_norm_penalty (row-penalty) on A. See documentation for more details
+                        verbose=verbose,  # Negative verbosity level for minimal (nonzero) printouts
+                        random_state=random_state,  # A seed can be given similar to how it's done in TensorLy
+                        return_admm_vars=False,
+                        return_errors=False
+                        )
+                    
+                est_weights, (est_A, est_B_is, est_C) = estimated_cmf
+                A_s.append(est_A)
+                B_is_s.append(est_B_is)
+                C_s.append(est_C)
+                weights_s.append(est_weights)
+
+    t = time.time()-t
+
+    if return_costs:
+        return weights_s, A_s, B_is_s, C_s, costs, t
+    
+    return weights_s, A_s, B_is_s, C_s, t
+
 
 """ ---------TESTING PROCEDURES---------- """
 
