@@ -236,7 +236,7 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1000, A_0=0, B_is_0=0, n_epoch
                 else :
                     B_is_init = [B_is_0[i].copy() for i in range(n_reps)]
                 if type(A_0) is int:
-                    A_init = tl.tensor(random_state.uniform(size=(n_pf2, rank)))
+                    A_init = tl.tensor(random_state.uniform(size=(n_reps, rank)))
                 else :
                     A_init = A_0.copy()
                 weights_init = None
