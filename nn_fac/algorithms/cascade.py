@@ -243,7 +243,10 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1000, A_0=0, B_is_0=0, n_epoch
             else:
                 B_is_init = [B_is_s[-1][i].copy() for i in range(n_reps)]
                 A_init = A_s[-1].copy()
-                weights_init = weights_s[-1].copy()
+                if weights_s[-1] is None:
+                    weights_init = None
+                else :
+                    weights_init = weights_s[-1].copy()
             if return_costs:
                 estimated_cmf, err = mc.decomposition.cmf_aoadmm(
                        X_reps,
