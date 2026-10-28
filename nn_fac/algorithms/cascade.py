@@ -190,6 +190,23 @@ def hnmf_cascade_training(Xs, E, rank, betas, update_rules, n_iters, n_stepS=100
     
     return Ss, Hs, As, t
 
+def pf2_nonneg_factors(estimated_cmf, admm_vars):
+    """
+    Returns the non-negative factors of a PARAFAC2 AO-ADMM decomposition.
+
+    cmf_aoadmm returns the main variables, which are unconstrained least-squares
+    solutions and may thus be negative. The constraints only hold on the auxiliary
+    variables, which we return instead.
+    The indices assume cmf_aoadmm was called with non_negative=True, parafac2=True,
+    l2_norm_bound=[x, x, 0] and l1_penalty={2: x} :
+        A : [L2Ball(non_negativity)]
+        B_is : [Parafac2, L2Ball(non_negativity)]
+        C : [L1Penalty(non_negativity)]
+    """
+    weights, _ = estimated_cmf
+    A_aux_list, B_is_aux_list, C_aux_list = admm_vars.auxes
+    return weights, (A_aux_list[0], B_is_aux_list[1], C_aux_list[0])
+
 def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=100, C_spar_coeff=0.01,
                         verbose=-5, return_costs=True, randomize_ord=True, deterministic=True):
     """
@@ -248,7 +265,7 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=10
                 else :
                     weights_init = weights_s[-1].copy()
             if return_costs:
-                estimated_cmf, err = mc.decomposition.cmf_aoadmm(
+                estimated_cmf, admm_vars, err = mc.decomposition.cmf_aoadmm(
                        X_reps,
                        rank=rank,
                        init="custom",
@@ -265,18 +282,18 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=10
                        constant_feasibility_penalty=True,  # Must be set to apply l2_norm_penalty (row-penalty) on A. See documentation for more details
                        verbose=verbose,  # Negative verbosity level for minimal (nonzero) printouts
                        random_state=random_state,  # A seed can be given similar to how it's done in TensorLy
-                       return_admm_vars=False,
+                       return_admm_vars=True,
                        return_errors=True
                        )
-                   
-                est_weights, (est_A, est_B_is, est_C) = estimated_cmf
+
+                est_weights, (est_A, est_B_is, est_C) = pf2_nonneg_factors(estimated_cmf, admm_vars)
                 costs[step] = err
                 A_s.append(est_A)
                 B_is_s.append(est_B_is)
                 C_s.append(est_C)
                 weights_s.append(est_weights)
             else:
-                estimated_cmf = mc.decomposition.cmf_aoadmm(
+                estimated_cmf, admm_vars = mc.decomposition.cmf_aoadmm(
                         X_reps,
                         rank=rank,
                         init="custom",
@@ -293,11 +310,11 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=10
                         constant_feasibility_penalty=True,  # Must be set to apply l2_norm_penalty (row-penalty) on A. See documentation for more details
                         verbose=verbose,  # Negative verbosity level for minimal (nonzero) printouts
                         random_state=random_state,  # A seed can be given similar to how it's done in TensorLy
-                        return_admm_vars=False,
+                        return_admm_vars=True,
                         return_errors=False
                         )
-                    
-                est_weights, (est_A, est_B_is, est_C) = estimated_cmf
+
+                est_weights, (est_A, est_B_is, est_C) = pf2_nonneg_factors(estimated_cmf, admm_vars)
                 A_s.append(est_A)
                 B_is_s.append(est_B_is)
                 C_s.append(est_C)
