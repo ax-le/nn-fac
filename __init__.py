@@ -3,6 +3,7 @@ from . import hnmf
 from . import ntf
 from . import ntd
 from . import parafac2
+from . import parafac2_nmf
 
 from . import simplex_nmf
 from . import min_vol_nmf
