@@ -16,18 +16,20 @@ def parafac2_nmf(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_stepH=10
         up_ord = "WH"
     else :
         up_ord = "HW"
-    sparsity_coefficients.reverse()
-    fixed_modes.reverse()
-    normalize.reverse()
+    # Reversed copies (not in-place) : index 0 now refers to H^T, index 1 to W^T
+    sparsity_coefficients = sparsity_coefficients[::-1]
+    fixed_modes = fixed_modes[::-1]
+    normalize = normalize[::-1]
 
     Cs, _, tc =csc.nmf_cascade_training(Xs_T, rank, betas, update_rules, n_iters, n_stepW=n_stepH, n_stepH=n_stepW, W_init=0, n_epoch=n_epoch,
                                         verbose=verbose, return_costs=False, update_order=up_ord, sparsity_coefficients=sparsity_coefficients,
                                         fixed_modes=fixed_modes, normalize=normalize, randomize_ord=randomize_ord, deterministic=deterministic)
 
     C = Cs[-1]
+    Ws_T_init = None if Ws_init is None else [tl.transpose(W) for W in Ws_init]
 
-    Ws_T, ti = csc.nmf_cascade_testing(Xs_T, C, rank, betas, update_rules, n_iters, n_stepH=n_stepW, Hs_init=Ws_init, verbose=verbose,
-                                        return_costs=False, sparsity_coefficient=sparsity_coefficients[0], normalize=normalize[0], deterministic=deterministic)
+    Ws_T, ti = csc.nmf_cascade_testing(Xs_T, C, rank, betas, update_rules, n_iters, n_stepH=n_stepW, Hs_init=Ws_T_init, verbose=verbose,
+                                        return_costs=False, sparsity_coefficient=sparsity_coefficients[1], normalize=normalize[1], deterministic=deterministic)
 
     Ws = [tl.transpose(W) for W in Ws_T]
     H = tl.transpose(C)
