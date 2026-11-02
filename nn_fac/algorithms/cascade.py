@@ -1,3 +1,4 @@
+from nn_fac.parafac2_nmf import parafac2_nmf
 import nn_fac.nmf as nnfacnmf
 import nn_fac.hnmf as nnfachnmf
 import matcouply as mc
@@ -326,6 +327,64 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=10
         return weights_s, A_s, B_is_s, C_s, costs, t
     
     return weights_s, A_s, B_is_s, C_s, t
+
+def pf2nmf_cascade_training(Xs, rank, betas, update_rules, n_iters=1, W_is_0=0, n_epoch=100, n_iepoch=100, C_spar_coeff=0.01,
+                        verbose=False, update_order="WH", randomize_ord=True, deterministic=True):
+    """
+    Parameters :
+    ------------
+    Returns :
+    ---------
+    """
+    n_pf2 = len(Xs)
+    W_is_s = []
+    H_s = []
+    if deterministic:
+        seed = 0
+    else:
+        rng = np.random.default_rng()
+        seed = rng.bit_generator.seed_seq.entropy
+
+    random_state = tl.check_random_state(seed)
+    
+    if type(betas) == int:
+            betas = [betas for _ in range(n_pf2)] 
+    if type(update_rules) == str:
+            update_rumes = [update_rules for _ in range(n_pf2)] 
+    if type(n_iters) == int:
+        n_iters = [n_iters for _ in range(n_pf2)] 
+    
+    t = time.time()
+    costs = [[] for _ in range(n_pf2)]
+
+    for epoch in tqdm(range(1, n_epoch+1)):
+        ind = range(n_pf2)
+        if randomize_ord:
+            ind = [i for i in range(n_pf2)]
+            random.shuffle(ind)
+        
+        for step in tqdm(ind):
+            X_reps = Xs[step]
+            n_reps = len(X_reps)
+            C_init = tl.tensor(random_state.uniform(size=(tl.shape(X_reps[0])[1], rank)))
+
+            if W_is_s == []:
+                if type(W_is_0) is int:
+                    W_is_init = [tl.tensor(random_state.uniform(size=(tl.shape(matrix)[0], rank))) for matrix in X_reps]
+                else :
+                    W_is_init = [W_is_0[i].copy() for i in range(n_reps)]
+            else:
+                W_is_init = [W_is_s[-1][i].copy() for i in range(n_reps)]
+
+            W_s, H = parafac2_nmf(X_reps, rank, betas[step], update_rules[step], n_iters=n_iters[step], Ws_init = W_is_init, n_epoch = n_iepoch, verbose=verbose,
+                    update_order=update_order, sparsity_coefficients=[0.0, C_spar_coeff], deterministic=deterministic)
+
+            W_is_s.append(W_s)
+            H_s.append(H)
+
+    t = time.time()-t
+    
+    return W_is_s, H_s, t
 
 
 """ ---------TESTING PROCEDURES---------- """
