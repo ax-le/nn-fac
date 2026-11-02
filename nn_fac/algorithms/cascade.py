@@ -350,7 +350,7 @@ def pf2nmf_cascade_training(Xs, rank, betas, update_rules, n_iters=1, W_is_0=0, 
     if type(betas) == int:
             betas = [betas for _ in range(n_pf2)] 
     if type(update_rules) == str:
-            update_rumes = [update_rules for _ in range(n_pf2)] 
+            update_rules = [update_rules for _ in range(n_pf2)] 
     if type(n_iters) == int:
         n_iters = [n_iters for _ in range(n_pf2)] 
     
