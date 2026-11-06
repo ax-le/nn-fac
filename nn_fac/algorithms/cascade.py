@@ -67,22 +67,22 @@ def nmf_cascade_training(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_
         
         for step in tqdm(ind):
             X = Xs[step]
-            Hinit = np.random.rand(rank, len(X[0,:])) + 1e-12
+            Hinit = tl.tensor(np.random.rand(rank, len(X[0,:])) + 1e-12, **tl.context(X))
             #TODO : allow to use something else than random for H only, W being derived from past iterations ?
             if Ws == []:
                 if type(W_init) is int:
-                    Winit = np.random.rand(len(X[:,0]), rank) + 1e-12
+                    Winit = tl.tensor(np.random.rand(len(X[:,0]), rank) + 1e-12, **tl.context(X))
                 else :
-                    Winit = W_init.copy()
+                    Winit = tl.copy(W_init)
             else:
-                Winit = Ws[-1].copy()
+                Winit = tl.copy(Ws[-1])
 
             if return_costs:
                 W, H, c, _ = nnfacnmf.nmf(Xs[step], rank, init="custom", U_0=Winit, V_0=Hinit, n_iter_max=n_iters[step], n_stepU=n_stepW, n_stepV=n_stepH, tol=1e-6, update_rule=update_rules[step],
                                     beta=betas[step], sparsity_coefficients=sparsity_coefficients, fixed_modes=fixed_modes, normalize=normalize, update_order=update_order, verbose=verbose, return_costs=True, deterministic=deterministic)
                 costs[step].append(c)
                 Ws.append(W)
-                Deltas.append(np.linalg.norm(Winit-W))
+                Deltas.append(tl.norm(Winit-W))
                 Hs.append(H)
             else:
                 W, H = nnfacnmf.nmf(Xs[step], rank, init="custom", U_0=Winit, V_0=Hinit, n_iter_max=n_iters[step], n_stepU=n_stepW, n_stepV=n_stepH, tol=1e-6, update_rule=update_rules[step],
@@ -153,20 +153,20 @@ def hnmf_cascade_training(Xs, E, rank, betas, update_rules, n_iters, n_stepS=100
         
         for step in tqdm(ind):
             X = Xs[step]
-            Hinit = np.random.rand(rank, len(X[0,:])) + 1e-12
+            Hinit = tl.tensor(np.random.rand(rank, len(X[0,:])) + 1e-12, **tl.context(X))
             #TODO : allow to use something else than random for H only, W being derived from past iterations ?
             if Ss == []:
                 if type(S_init) is int:
-                    Sinit = np.random.rand(len(X[:,0]), rank) + 1e-12
+                    Sinit = tl.tensor(np.random.rand(len(X[:,0]), rank) + 1e-12, **tl.context(X))
                 else :
-                    Sinit = S_init.copy()
-                Ainit = np.ones((rank,rank))#np.random.rand(rank,rank) + 1e-12
+                    Sinit = tl.copy(S_init)
+                Ainit = tl.ones((rank,rank), **tl.context(X))#np.random.rand(rank,rank) + 1e-12
             else:
-                Sinit = Ss[-1].copy()
-                Ainit = As[-1].copy()
+                Sinit = tl.copy(Ss[-1])
+                Ainit = tl.copy(As[-1])
 
             if return_costs:
-                S, H, A, c, _ = nnfachnmf.hnmf(Xs[step], rank, E, init="custom", S_0=Sinit, A_0=Ainit, V_0=Hinit, n_iter_max=n_iters[step], n_stepS=n_stepS, n_stepV=n_stepH, tol=1e-6, update_rule=update_rules[step],
+                S, A, H, c, _ = nnfachnmf.hnmf(Xs[step], rank, E, init="custom", S_0=Sinit, A_0=Ainit, V_0=Hinit, n_iter_max=n_iters[step], n_stepS=n_stepS, n_stepV=n_stepH, tol=1e-6, update_rule=update_rules[step],
                                     beta=betas[step], sparsity_coefficients=sparsity_coefficients, fixed_modes=fixed_modes, normalize=normalize, update_order=update_order, verbose=verbose, return_costs=True, deterministic=deterministic)
                 costs[step].append(c)
                 Ss.append(S)
@@ -174,7 +174,7 @@ def hnmf_cascade_training(Xs, E, rank, betas, update_rules, n_iters, n_stepS=100
                 #Deltas.append(np.linalg.norm(Sinit-S))
                 Hs.append(H)
             else:
-                S, H, A = nnfachnmf.hnmf(Xs[step], rank, E, init="custom", S_0=Sinit, A_0=Ainit, V_0=Hinit, n_iter_max=n_iters[step], n_stepS=n_stepS, n_stepV=n_stepH, tol=1e-6, update_rule=update_rules[step],
+                S, A, H = nnfachnmf.hnmf(Xs[step], rank, E, init="custom", S_0=Sinit, A_0=Ainit, V_0=Hinit, n_iter_max=n_iters[step], n_stepS=n_stepS, n_stepV=n_stepH, tol=1e-6, update_rule=update_rules[step],
                                     beta=betas[step], sparsity_coefficients=sparsity_coefficients, fixed_modes=fixed_modes, normalize=normalize, update_order=update_order, verbose=verbose, return_costs=False, deterministic=deterministic)
                 Ss.append(S)
                 As.append(A)
@@ -206,7 +206,7 @@ def pf2_nonneg_factors(estimated_cmf, admm_vars):
     """
     weights, _ = estimated_cmf
     A_aux_list, B_is_aux_list, C_aux_list = admm_vars.auxes
-    return weights, (A_aux_list[0], B_is_aux_list[1], C_aux_list[0])
+    return weights, (A_aux_list[0], B_is_aux_list[0], C_aux_list[0])
 
 def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=100, C_spar_coeff=0.01,
                         verbose=-5, return_costs=True, randomize_ord=True, deterministic=True):
@@ -246,25 +246,25 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=10
         for step in tqdm(ind):
             X_reps = Xs[step]
             n_reps = len(X_reps)
-            C_init = tl.tensor(random_state.uniform(size=(tl.shape(X_reps[0])[1], rank)))
+            C_init = tl.tensor(random_state.uniform(size=(tl.shape(X_reps[0])[1], rank)), **tl.context(X_reps[0]))
 
             if B_is_s == []:
                 if type(B_is_0) is int:
-                    B_is_init = [tl.tensor(random_state.uniform(size=(tl.shape(matrix)[0], rank))) for matrix in X_reps]
+                    B_is_init = [tl.tensor(random_state.uniform(size=(tl.shape(matrix)[0], rank)), **tl.context(matrix)) for matrix in X_reps]
                 else :
-                    B_is_init = [B_is_0[i].copy() for i in range(n_reps)]
+                    B_is_init = [tl.copy(B_is_0[i]) for i in range(n_reps)]
                 if type(A_0) is int:
-                    A_init = tl.tensor(random_state.uniform(size=(n_reps, rank)))
+                    A_init = tl.tensor(random_state.uniform(size=(n_reps, rank)), **tl.context(X_reps[0]))
                 else :
-                    A_init = A_0.copy()
+                    A_init = tl.copy(A_0)
                 weights_init = None
             else:
-                B_is_init = [B_is_s[-1][i].copy() for i in range(n_reps)]
-                A_init = A_s[-1].copy()
+                B_is_init = [tl.copy(B_is_s[-1][i]) for i in range(n_reps)]
+                A_init = tl.copy(A_s[-1])
                 if weights_s[-1] is None:
                     weights_init = None
                 else :
-                    weights_init = weights_s[-1].copy()
+                    weights_init = tl.copy(weights_s[-1])
             if return_costs:
                 estimated_cmf, admm_vars, err = mc.decomposition.cmf_aoadmm(
                        X_reps,
@@ -329,7 +329,7 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=10
     return weights_s, A_s, B_is_s, C_s, t
 
 def pf2nmf_cascade_training(Xs, rank, betas, update_rules, n_iters=1, W_is_0=0, n_epoch=100, n_tr_epoch=100, n_te_epoch=30, C_spar_coeff=0.01,
-                        verbose=False, update_order="WH", randomize_ord=True, deterministic=True):
+                        verbose=False, update_order="WH", randomize_ord=True, deterministic=True, return_errors=False):
     """
     Parameters :
     ------------
@@ -366,24 +366,27 @@ def pf2nmf_cascade_training(Xs, rank, betas, update_rules, n_iters=1, W_is_0=0, 
         for step in tqdm(ind):
             X_reps = Xs[step]
             n_reps = len(X_reps)
-            C_init = tl.tensor(random_state.uniform(size=(tl.shape(X_reps[0])[1], rank)))
+            C_init = tl.tensor(random_state.uniform(size=(tl.shape(X_reps[0])[1], rank)), **tl.context(X_reps[0]))
 
             if W_is_s == []:
                 if type(W_is_0) is int:
-                    W_is_init = [tl.tensor(random_state.uniform(size=(tl.shape(matrix)[0], rank))) for matrix in X_reps]
+                    W_is_init = [tl.tensor(random_state.uniform(size=(tl.shape(matrix)[0], rank)), **tl.context(matrix)) for matrix in X_reps]
                 else :
-                    W_is_init = [W_is_0[i].copy() for i in range(n_reps)]
+                    W_is_init = [tl.copy(W_is_0[i]) for i in range(n_reps)]
             else:
-                W_is_init = [W_is_s[-1][i].copy() for i in range(n_reps)]
+                W_is_init = [tl.copy(W_is_s[-1][i]) for i in range(n_reps)]
 
-            W_s, H, _ = parafac2_nmf(X_reps, rank, betas[step], update_rules[step], n_iters=n_iters[step], Ws_init = W_is_init, n_tr_epoch = n_tr_epoch, n_te_epoch=n_te_epoch, verbose=verbose,
-                    update_order=update_order, sparsity_coefficients=[0.0, C_spar_coeff], deterministic=deterministic)
+            W_s, H, _, errs = parafac2_nmf(X_reps, rank, betas[step], update_rules[step], n_iters=n_iters[step], Ws_init = W_is_init, n_tr_epoch = n_tr_epoch, n_te_epoch=n_te_epoch, verbose=verbose,
+                    update_order=update_order, sparsity_coefficients=[0.0, C_spar_coeff], deterministic=deterministic, return_errors=True)
+            costs[step].append(errs) # costs[step][k] : errors of the k-th visit of the sample step (see parafac2_nmf)
 
             W_is_s.append(W_s)
             H_s.append(H)
 
     t = time.time()-t
-    
+
+    if return_errors:
+        return W_is_s, H_s, costs, t
     return W_is_s, H_s, t
 
 
@@ -424,7 +427,7 @@ def nmf_cascade_testing(Xs, W_casc, rank, betas, update_rules, n_iters,  n_stepH
         X = Xs[i]
 
         if Hs_init is None:
-            H_0 = tl.random.random_tensor((rank, len(X[0,:]))) + 1e-12
+            H_0 = tl.random.random_tensor((rank, len(X[0,:])), **tl.context(X)) + 1e-12
         else :
             H_0 = Hs_init[i]
 

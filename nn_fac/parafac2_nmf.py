@@ -3,11 +3,14 @@ import tensorly as tl
 import nn_fac.algorithms.cascade as csc
 
 def parafac2_nmf(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_stepH=100, Ws_init=None, n_tr_epoch=100, n_te_epoch=30, 
-                verbose=False, update_order="WH", sparsity_coefficients=[0.0, 0.0], fixed_modes=[0,0], normalize=[True, False], randomize_ord=True, deterministic=True):
+                verbose=False, update_order="WH", sparsity_coefficients=[0.0, 0.0], fixed_modes=[0,0], normalize=[True, False], randomize_ord=True, deterministic=True, return_errors=False):
     """
     Obtaining a PARAFAC2 like decomposition by cascading the C^T matrix through multiple NMFs, one for each layer of matrices.
 
     Xs : list of matrices
+    return_errors : if True, also returns a dict of costs (reconstruction + sparsity penalty, not normalized) :
+        errors["train"][i] : costs of the NMFs on the representation i during the cascade (n_iters values per epoch),
+        errors["test"][i] : costs of the NMF on the representation i during the inference of W_i (one value per iteration).
     """
 
     Xs_T = [tl.transpose(X) for X in Xs]
@@ -21,18 +24,20 @@ def parafac2_nmf(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_stepH=10
     fixed_modes = fixed_modes[::-1]
     normalize = normalize[::-1]
 
-    Cs, _, tc =csc.nmf_cascade_training(Xs_T, rank, betas, update_rules, n_iters, n_stepW=n_stepH, n_stepH=n_stepW, W_init=0, n_epoch=n_tr_epoch,
-                                        verbose=verbose, return_costs=False, update_order=up_ord, sparsity_coefficients=sparsity_coefficients,
+    Cs, _, train_costs, tc =csc.nmf_cascade_training(Xs_T, rank, betas, update_rules, n_iters, n_stepW=n_stepH, n_stepH=n_stepW, W_init=0, n_epoch=n_tr_epoch,
+                                        verbose=verbose, return_costs=True, update_order=up_ord, sparsity_coefficients=sparsity_coefficients,
                                         fixed_modes=fixed_modes, normalize=normalize, randomize_ord=randomize_ord, deterministic=deterministic)
 
     C = Cs[-1]
     Ws_T_init = None if Ws_init is None else [tl.transpose(W) for W in Ws_init]
 
-    Ws_T, ti = csc.nmf_cascade_testing(Xs_T, C, rank, betas, update_rules, n_te_epoch, n_stepH=n_stepW, Hs_init=Ws_T_init, verbose=verbose,
-                                        return_costs=False, sparsity_coefficient=sparsity_coefficients[1], normalize=normalize[1], deterministic=deterministic)
+    Ws_T, ti, test_costs = csc.nmf_cascade_testing(Xs_T, C, rank, betas, update_rules, n_te_epoch, n_stepH=n_stepW, Hs_init=Ws_T_init, verbose=verbose,
+                                        return_costs=True, sparsity_coefficient=sparsity_coefficients[1], normalize=normalize[1], deterministic=deterministic)
 
     Ws = [tl.transpose(W) for W in Ws_T]
     H = tl.transpose(C)
     t = tc + ti
 
+    if return_errors:
+        return Ws, H, t, {"train": train_costs, "test": test_costs}
     return Ws, H, t
