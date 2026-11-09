@@ -14,9 +14,14 @@ def parafac2_nmf(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_stepH=10
     """
 
     Xs_T = [tl.transpose(X) for X in Xs]
+    Ws_T_init = None if Ws_init is None else [tl.transpose(W) for W in Ws_init]
+    # Initial H matrices for the training cascade (X_i^T ~ C W_i^T, so H_i = W_i^T)
+    Hs_train_init = Ws_T_init
 
     if conc_mode3 :
         Xs_T = [tl.concatenate(Xs_T, axis=1)]
+        if Ws_T_init is not None:
+            Hs_train_init = [tl.concatenate(Ws_T_init, axis=1)]
 
     if update_order == "HW":
         up_ord = "WH"
@@ -29,10 +34,9 @@ def parafac2_nmf(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_stepH=10
 
     Cs, _, train_costs, tc =csc.nmf_cascade_training(Xs_T, rank, betas, update_rules, n_iters, n_stepW=n_stepH, n_stepH=n_stepW, W_init=0, n_epoch=n_tr_epoch,
                                         verbose=verbose, return_costs=True, update_order=up_ord, sparsity_coefficients=sparsity_coefficients,
-                                        fixed_modes=fixed_modes, normalize=normalize, randomize_ord=randomize_ord, deterministic=deterministic)
+                                        fixed_modes=fixed_modes, normalize=normalize, randomize_ord=randomize_ord, deterministic=deterministic, H_inits=Hs_train_init)
 
     C = Cs[-1]
-    Ws_T_init = None if Ws_init is None else [tl.transpose(W) for W in Ws_init]
 
     if conc_mode3:
         Xs_T = [tl.transpose(X) for X in Xs]

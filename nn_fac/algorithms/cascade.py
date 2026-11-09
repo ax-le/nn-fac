@@ -18,7 +18,7 @@ is shared for both NMF and HNMF traing procedures since the dictionnary W or S(E
 """ ----------TRAINING PROCEDURES---------- """
 
 def nmf_cascade_training(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_stepH=100, W_init=0, n_epoch=100, 
-                verbose=False, return_costs=False, update_order="HW", sparsity_coefficients=[0.0, 0.0], fixed_modes=[0,0], normalize=[True, False], randomize_ord=True, deterministic=True):
+                verbose=False, return_costs=False, update_order="HW", sparsity_coefficients=[0.0, 0.0], fixed_modes=[0,0], normalize=[True, False], randomize_ord=True, deterministic=True, H_inits=None):
     """
     Parameters :
     ------------
@@ -38,6 +38,8 @@ def nmf_cascade_training(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_
         normalize : List of booleans indicating if the matrices are normalized or not during the NMFs.
         randomize_ord : boolean indicating if the order in which the spectrograms are viewed in the training phase is randomized or not.
         deterministic : boolean indicating if the nmfs are deterministics or not.
+        H_inits : Either None if the H matrices are initialised randomly, or a list of arrays (one per element of Xs, same order)
+            used as initialisations of H for the corresponding spectrogram. Each H_inits[step] must have shape (rank, Xs[step].shape[1]).
     
     Returns :
     ---------
@@ -56,6 +58,9 @@ def nmf_cascade_training(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_
     if type(n_iters) == int:
         n_iters = [n_iters for _ in range(n_nmf)] 
 
+    if H_inits is not None and len(H_inits) != n_nmf:
+        raise ValueError(f"H_inits must contain as many matrices as Xs ({n_nmf}), got {len(H_inits)}.")
+
     t = time.time()
     costs = [[] for _ in range(n_nmf)]
 
@@ -67,8 +72,10 @@ def nmf_cascade_training(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_
         
         for step in tqdm(ind):
             X = Xs[step]
-            Hinit = tl.tensor(np.random.rand(rank, len(X[0,:])) + 1e-12, **tl.context(X))
-            #TODO : allow to use something else than random for H only, W being derived from past iterations ?
+            if H_inits is None:
+                Hinit = tl.tensor(np.random.rand(rank, len(X[0,:])) + 1e-12, **tl.context(X))
+            else:
+                Hinit = tl.copy(tl.tensor(H_inits[step], **tl.context(X)))
             if Ws == []:
                 if type(W_init) is int:
                     Winit = tl.tensor(np.random.rand(len(X[:,0]), rank) + 1e-12, **tl.context(X))
