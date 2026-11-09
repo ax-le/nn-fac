@@ -142,9 +142,9 @@ def hals_nnls(in_data, in_U, in_V, maxiter=100, sparsity_coefficient = None, nor
     if in_U.shape[1] != in_V.shape[0]:
         raise err.ArgumentException("U and V must have the same number of columns and rows respectively")
 
-    data = in_data.copy()
-    U = in_U.copy()
-    V = in_V.copy()
+    data = tl.copy(in_data)
+    U = tl.copy(in_U)
+    V = tl.copy(in_V)
 
     # Precompute the cross products for the inner HALS loop.
     UtU = tl.dot(tl.transpose(U),U)
@@ -212,13 +212,15 @@ def one_step_hals_nnls(V, UtM, UtU, sparsity_coefficient = None, normalize = Fal
                             (used as a convergence criterion)
     """
     updates_cumulative_sum = 0
+    # Computed once per pass (on the CPU) : avoids a GPU->CPU synchronization for each row with the pytorch backend.
+    zero_diag = tl.to_numpy(tl.diag(UtU)) == 0
     # Loop over the rows of V
     for k in range(V.shape[0]):
-        if UtU[k, k] == 0:
+        if zero_diag[k]:
             if nonzero:
                 raise err.ZeroColumnWhenUnautorized(f"A column {k} of U (in the nnls update) is zero with nonzero condition")
             continue
-        old_Vk = V[k,:].copy()
+        old_Vk = tl.copy(V[k,:])
         V[k,:] = columnwise_nnls(V, UtM, UtU, k, sparsity_coefficient=sparsity_coefficient, normalize=normalize, nonzero=nonzero)
         deltaV = V[k,:] - old_Vk # Compute the change in V[k,:]
         updates_cumulative_sum += tl.dot(deltaV, tl.transpose(deltaV))
@@ -256,7 +258,7 @@ def columnwise_nnls(V, UtM, UtU, k, sparsity_coefficient=None, normalize=False, 
 
     # NNLS resolution, with or without sparsity constraint
     if sparsity_coefficient != None: # Using the sparsifying objective function
-        deltaV = tl.clip((UtM[k,:] - UtU[k,:]@V - sparsity_coefficient * tl.ones(n)) / UtU[k,k], a_min=-V[k,:])
+        deltaV = tl.clip((UtM[k,:] - UtU[k,:]@V - sparsity_coefficient * tl.ones(n, **tl.context(V))) / UtU[k,k], a_min=-V[k,:])
 
     else: # Without sparsity constraint
         deltaV = tl.clip((UtM[k,:] - UtU[k,:]@V) / UtU[k,k], a_min=-V[k,:])
@@ -265,7 +267,7 @@ def columnwise_nnls(V, UtM, UtU, k, sparsity_coefficient=None, normalize=False, 
     updated_col = V[k,:] + deltaV
 
     if nonzero and (updated_col == 0).all(): # Safety procedure, if columns aren't allow to be zero
-        updated_col = 1e-10 * tl.ones(n)
+        updated_col = 1e-10 * tl.ones(n, **tl.context(V))
 
     if normalize:
         norm = tl.norm(updated_col)
@@ -273,7 +275,7 @@ def columnwise_nnls(V, UtM, UtU, k, sparsity_coefficient=None, normalize=False, 
             updated_col /= norm
         else:
             sqrt_n = 1 / n ** (1 / 2)
-            updated_col = sqrt_n * tl.ones(n)
+            updated_col = sqrt_n * tl.ones(n, **tl.context(V))
 
     assert len(updated_col.shape) == 1, f"Updated column has shape {updated_col.shape}, expected a 1D array."
     assert updated_col.shape[0] == n, f"Updated column has shape {updated_col.shape}, expected ({n},)"
@@ -353,9 +355,9 @@ def hals_nnls_acc(in_data, in_U, in_V, maxiter=500, alpha=0.5, delta=0.01,
     if in_U.shape[1] != in_V.shape[0]:
         raise err.ArgumentException("U and V must have the same number of columns and rows respectively")
 
-    data = in_data.copy()
-    U = in_U.copy()
-    V = in_V.copy()
+    data = tl.copy(in_data)
+    U = tl.copy(in_U)
+    V = tl.copy(in_V)
 
     # Set timer for acceleration in hals_nnls_acc
     tic = time.time()
@@ -475,9 +477,9 @@ def hals_coupling_nnls_acc(in_data, in_U, in_V, Vtarget, mu,
     if in_U.shape[1] != in_V.shape[0]:
         raise err.ArgumentException("U and V must have the same number of columns and rows respectively")
 
-    data = in_data.copy()
-    U = in_U.copy()
-    V = in_V.copy()
+    data = tl.copy(in_data)
+    U = tl.copy(in_U)
+    V = tl.copy(in_V)
 
     # Set timer for acceleration
     tic = time.time()
@@ -485,7 +487,7 @@ def hals_coupling_nnls_acc(in_data, in_U, in_V, Vtarget, mu,
     UtM = tl.dot(tl.transpose(U), data)
     atime = time.time() - tic
 
-    if in_V.size == 0:  # checks if V is empty
+    if 0 in tl.shape(in_V):  # checks if V is empty
         V = tl.solve(UtU, UtM)  # Least squares
         V[V < 0] = 0
         # Scaling
@@ -556,6 +558,6 @@ def one_step_hals_coupling_nnls(V, UtM, UtU, Vtarget, mu, normalize=False, nonze
                 V[k,:] /= norm
             else:
                 sqrt_n = 1 / n ** (1/2)
-                V[k,:] = sqrt_n * tl.ones(n)
+                V[k,:] = sqrt_n * tl.ones(n, **tl.context(V))
         nodelta += tl.dot(deltaV, tl.transpose(deltaV))
     return V, nodelta

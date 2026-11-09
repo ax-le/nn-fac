@@ -87,7 +87,7 @@ def mu_betadivmin(U, V, M, beta):
     if beta == 1:
         K_inverted = K**(-1)
         line = tl.sum(V.T,axis=0)
-        denom = tl.tensor([line for i in range(tl.shape(K)[0])])
+        denom = tl.reshape(line, (1, -1)) # same row for every line of U, by broadcasting
         return tl.clip(U * (tl.dot((K_inverted*M),V.T) / denom),a_min=epsilon)
     elif beta == 2:
         denom = tl.dot(K,V.T)
@@ -144,12 +144,12 @@ def mu_tensorial(G, factors, tensor, beta):
     K = tl.tenalg.multi_mode_dot(G,factors)
 
     if beta == 1:
-        L1 = tl.ones(tl.shape(K))
+        L1 = tl.ones(tl.shape(K), **tl.context(K))
         L2 = K**(-1) * tensor
 
     elif beta == 2:
         L1 = K
-        L2 = tl.ones(tl.shape(K)) * tensor
+        L2 = tl.ones(tl.shape(K), **tl.context(K)) * tensor
 
     elif beta == 3:
         L1 = K**2
@@ -164,7 +164,7 @@ def mu_tensorial(G, factors, tensor, beta):
 def simplex_proj_mu(data, W, H, beta, tol_update_lagrangian = 1e-6):
     # Projects H on the unit simplex, comes from 'Leplat, V., Gillis, N., & Idier, J. (2021). Multiplicative updates for NMF with β-divergences under disjoint equality constraints. SIAM Journal on Matrix Analysis and Applications, 42(2), 730-752. arXiv:2010.16223.'
     k,n = H.shape
-    Jk1 = tl.ones((k, 1))
+    Jk1 = tl.ones((k, 1), **tl.context(H))
     C=(W.T@(((W@H)**(beta-2)) * data))
     D=W.T@((W@H)**(beta-1))
 

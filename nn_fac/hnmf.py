@@ -329,9 +329,9 @@ def compute_hnmf(data, rank, E, S_in, A_in, V_in, n_iter_max=100, n_stepS=100, n
     Neural computation, 23(9), 2421-2456.
     """
     # initialisation
-    S = S_in.copy()
-    A = A_in.copy()
-    V = V_in.copy()
+    S = tl.copy(S_in)
+    A = tl.copy(A_in)
+    V = tl.copy(V_in)
     cost_fct_vals = []
     norm_data = tl.norm(data)
     tic = time.time()
@@ -352,7 +352,7 @@ def compute_hnmf(data, rank, E, S_in, A_in, V_in, n_iter_max=100, n_stepS=100, n
 
         toc.append(time.time() - tic)
 
-        cost_fct_vals.append(cost)
+        cost_fct_vals.append(float(cost)) # python float: avoids keeping 0-d (GPU) tensors in the list
 
         if verbose:
             if iteration == 0:
@@ -451,25 +451,25 @@ def one_hnmf_step(data, rank, E, S_in, A_in, V_in, n_stepS, n_stepV, norm_data, 
         raise ValueError("HNMF needs 3 sparsity coefficients to be performed")
 
     # Copy
-    S = S_in.copy()
-    A = A_in.copy()
-    V = V_in.copy()
+    S = tl.copy(S_in)
+    A = tl.copy(A_in)
+    V = tl.copy(V_in)
 
     def S_update(data, E, S, A, V, n_iter, update_rule, beta, sparsity_coefficients, normalize, deterministic):
         match update_rule:
             case "hals":
-                tmp_S = nnls.switch_alternate_hals(data, S, (np.multiply(E,A)@V), "U", maxiter=n_iter, sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False, hals_inner_tol=1e-8)
+                tmp_S = nnls.switch_alternate_hals(data, S, ((E*A)@V), "U", maxiter=n_iter, sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero = False, hals_inner_tol=1e-8)
 
             case "hals_acc":
                 # switch_alternate_hals_acc already returns the updated factor directly
                 # (not a tuple), so no indexing is needed.
                 # U_in is used as the warm-start initialisation for the NNLS inner solver.
-                tmp_S = nnls.switch_alternate_hals_acc(data, S_in, (np.multiply(E,A)@V), "U", maxiter=n_iter, alpha=0.5, delta=0.01,
+                tmp_S = nnls.switch_alternate_hals_acc(data, S_in, ((E*A)@V), "U", maxiter=n_iter, alpha=0.5, delta=0.01,
                                             sparsity_coefficient = sparsity_coefficients[0], normalize = normalize[0], nonzero=False,
                                             deterministic = deterministic)
             
             case "mu":
-                tmp_S = mu.switch_alternate_mu(data, S, (np.multiply(E,A)@V), beta, "U") #mu.mu_betadivmin(U, V, data, beta)
+                tmp_S = mu.switch_alternate_mu(data, S, ((E*A)@V), beta, "U") #mu.mu_betadivmin(U, V, data, beta)
 
             case _:
                 raise err.InvalidArgumentValue(f"Invalid update rule: {update_rule}") from None
@@ -480,17 +480,17 @@ def one_hnmf_step(data, rank, E, S_in, A_in, V_in, n_stepS, n_stepV, norm_data, 
         match update_rule:
             case "hals":
                 # sparsity and normalize index 1 corresponds to V (index 0 is for U)
-                tmp_V = nnls.switch_alternate_hals(data, (S@(np.multiply(E,A))), V, "V", maxiter=n_iter, sparsity_coefficient = sparsity_coefficients[2], normalize = normalize[2], nonzero = False, hals_inner_tol=1e-8)
+                tmp_V = nnls.switch_alternate_hals(data, (S@((E*A))), V, "V", maxiter=n_iter, sparsity_coefficient = sparsity_coefficients[2], normalize = normalize[2], nonzero = False, hals_inner_tol=1e-8)
 
             case "hals_acc":
                 # U is the *current* fixed factor (possibly updated earlier this step);
                 # using U_in here would silently apply a stale factor.
-                tmp_V = nnls.switch_alternate_hals_acc(data, (S@(np.multiply(E,A))), V, "V", maxiter=n_iter, alpha=0.5, delta=0.01,
+                tmp_V = nnls.switch_alternate_hals_acc(data, (S@((E*A))), V, "V", maxiter=n_iter, alpha=0.5, delta=0.01,
                                             sparsity_coefficient = sparsity_coefficients[2], normalize = normalize[2], nonzero=False,
                                             deterministic = deterministic)
             
             case "mu":
-                tmp_V = mu.switch_alternate_mu(data, (S@(np.multiply(E,A))), V, beta, "V")
+                tmp_V = mu.switch_alternate_mu(data, (S@((E*A))), V, beta, "V")
 
             case _:
                 raise err.InvalidArgumentValue(f"Invalid update rule: {update_rule}") from None
@@ -502,35 +502,28 @@ def one_hnmf_step(data, rank, E, S_in, A_in, V_in, n_stepS, n_stepV, norm_data, 
         tmp_A = A
 
         #Only a multiplicative update is implemented for now
-        StDVt = E * np.dot(np.transpose(S), np.dot(data, np.transpose(V)))
+        StDVt = E * tl.dot(tl.transpose(S), tl.dot(data, tl.transpose(V)))
         #WARNING : the numerator and denominator are multiplied pointwise by E, which is sparse. The simplification can only occur for elements where E
         #is nonnegative.
-        StS = np.dot(np.transpose(S),S)
-        VVt = np.dot(V,np.transpose(V))
-        ApE = np.multiply(tmp_A,E)
-        Denom = E * np.dot(StS, np.dot(ApE, VVt))
+        StS = tl.dot(tl.transpose(S),S)
+        VVt = tl.dot(V,tl.transpose(V))
+        ApE = tmp_A * E
+        Denom = E * tl.dot(StS, tl.dot(ApE, VVt))
         if l2_p: #adding l2 norm penalty
-            Denom += 2*tmp_A 
-        not_fonda_mask = ((np.ones((rank,rank)) - np.identity(rank)) != 0)
+            Denom = Denom + 2*tmp_A
+        not_fonda_mask = (tl.eye(rank, **tl.context(A)) == 0) # we remove the diagonal from the A values to update
 
-        non_zero_mask = ((np.multiply(Denom, ApE)) != 0) #Update where E and A, but also the denominator are not zero.
+        non_zero_mask = ((Denom * ApE) != 0) #Update where E and A, but also the denominator are not zero.
 
-        ##we remove the diagonal from the A values to update :
-        #mask = np.logical_and(not_fonda_mask, not_zero_mask)
-
-        frac = np.ones((rank,rank))
-        np.divide(StDVt, Denom, out=frac, where=non_zero_mask) #MUR style ; problem is there might be some zeros in the denom since E is very sparse
-        tmp_A = np.maximum(1e-12, np.multiply(tmp_A, frac, out=A.copy(), where=not_fonda_mask))
+        #MUR style ; problem is there might be some zeros in the denom since E is very sparse : frac is set to 1 there.
+        frac = tl.where(non_zero_mask, StDVt / tl.where(non_zero_mask, Denom, 1.0), 1.0)
+        tmp_A = tl.clip(tl.where(not_fonda_mask, tmp_A * frac, A), a_min=1e-12)
         #Y = np.maximum(0, X - eta*(Denom - StDHt))                    #Gradient descent classic + projection to keep positive constraint up.
 
         if normalize[1]:
-            for k in range(rank):
-                norm = np.linalg.norm(tmp_A[:,k])
-                if norm != 0:
-                    tmp_A[:,k] /= norm
-                else:
-                    sqrt_n = 1/rank ** (1/2)
-                    tmp_A[:,k] = [sqrt_n for _ in range(rank)]
+            # column-wise l2 normalization, columns with a zero norm are set to 1/sqrt(rank)
+            norms = tl.sqrt(tl.sum(tmp_A**2, axis=0))
+            tmp_A = tl.where(norms != 0, tmp_A / tl.where(norms != 0, norms, 1.0), 1/rank ** (1/2))
 
         return tmp_A
 
@@ -581,7 +574,7 @@ def one_hnmf_step(data, rank, E, S_in, A_in, V_in, n_stepS, n_stepV, norm_data, 
             A = A_update(data, E, S, A, V, sparsity_coefficients, normalize, l2_p=True)
 
     # Replace None sparsity entries with 0 for cost computation
-    sparsity_coefficients = tl.where(tl.tensor(sparsity_coefficients) == None, 0, sparsity_coefficients)
+    sparsity_coefficients = [0 if coeff is None else coeff for coeff in sparsity_coefficients]
     
     if update_rule in ["hals", "hals_acc"]:  # Both HALS variants minimise the Frobenius norm
         cost = tl.norm(data-tl.dot(tl.dot(S,E*A),V), order=2) ** 2 + 2 * (sparsity_coefficients[0] * tl.norm(S, order=1) + sparsity_coefficients[1] * tl.norm(A, order=1) + sparsity_coefficients[2] * tl.norm(V, order=1))

@@ -44,8 +44,8 @@ def nmf_initialization(data, rank, init_type, deterministic = False, seed = 0):
                 random.seed(seed)
                 tl_additional_utils.set_random_state(seed)
             m, n = data.shape
-            U_0 = np.random.rand(m, rank)
-            V_0 = np.random.rand(rank, n)
+            U_0 = tl.tensor(np.random.rand(m, rank), **tl.context(data))
+            V_0 = tl.tensor(np.random.rand(rank, n), **tl.context(data))
             U_0 = tl.clip(U_0, a_min=epsilon)
             V_0 = tl.clip(V_0, a_min=epsilon)
             return U_0, V_0
@@ -61,9 +61,9 @@ def hnmf_initialization(data, rank, E, init_type, deterministic = False, seed = 
                 random.seed(seed)
                 tl_additional_utils.set_random_state(seed)
             m, n = data.shape
-            S_0 = np.random.rand(m, rank)
-            A_0 = np.random.rand(rank, rank)
-            V_0 = np.random.rand(rank, n)
+            S_0 = tl.tensor(np.random.rand(m, rank), **tl.context(data))
+            A_0 = tl.tensor(np.random.rand(rank, rank), **tl.context(data))
+            V_0 = tl.tensor(np.random.rand(rank, n), **tl.context(data))
             S_0 = tl.clip(S_0, a_min=epsilon)
             A_0 = tl.clip(A_0, a_min=epsilon)
             V_0 = tl.clip(V_0, a_min=epsilon)
@@ -189,6 +189,10 @@ def parafac2_initialization(tensor_slices, rank, init_type, init_with_P, determi
 
 # %% Common init methods
 def nndsvd(V, rank):
+    # Computed with numpy (on the CPU), then converted back to the backend/device of V.
+    context = tl.context(V)
+    V = tl.to_numpy(V)
+
     def _is_negative(V):
         if V.any() < 0:
             return True
@@ -230,6 +234,6 @@ def nndsvd(V, rank):
             W[:, i] = np.sqrt(S[i] * termn) / n_uun * uun
             H[i, :] = np.sqrt(S[i] * termn) / n_vvn * vvn.T
     # Important, not to be stuck on zeroes
-    W = tl.clip(W, a_min=epsilon)
-    H = tl.clip(H, a_min=epsilon)
+    W = tl.clip(tl.tensor(W, **context), a_min=epsilon)
+    H = tl.clip(tl.tensor(H, **context), a_min=epsilon)
     return W, H

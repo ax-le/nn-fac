@@ -319,8 +319,8 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, n_stepU=100, n_stepV=100
     Neural computation, 23(9), 2421-2456.
     """
     # initialisation
-    U = U_in.copy()
-    V = V_in.copy()
+    U = tl.copy(U_in)
+    V = tl.copy(V_in)
     cost_fct_vals = []
     norm_data = tl.norm(data)
     tic = time.time()
@@ -341,7 +341,7 @@ def compute_nmf(data, rank, U_in, V_in, n_iter_max=100, n_stepU=100, n_stepV=100
 
         toc.append(time.time() - tic)
 
-        cost_fct_vals.append(cost)
+        cost_fct_vals.append(float(cost)) # python float: avoids keeping 0-d (GPU) tensors in the list
 
         if verbose:
             if iteration == 0:
@@ -438,8 +438,8 @@ def one_nmf_step(data, rank, U_in, V_in, n_stepU, n_stepV, norm_data, update_rul
         raise ValueError("NMF needs 2 sparsity coefficients to be performed")
 
     # Copy
-    U = U_in.copy()
-    V = V_in.copy()
+    U = tl.copy(U_in)
+    V = tl.copy(V_in)
 
     def U_update(data, U, V, n_iter, update_rule, beta, sparsity_coefficients, normalize, deterministic):
         match update_rule:
@@ -514,7 +514,7 @@ def one_nmf_step(data, rank, U_in, V_in, n_stepU, n_stepV, norm_data, update_rul
                 raise err.InvalidArgumentValue(f"Invalid update order: {update_order}. Should be 'UV', 'VU', 'WH', or 'HW'") from None
 
     # Replace None sparsity entries with 0 for cost computation
-    sparsity_coefficients = tl.where(tl.tensor(sparsity_coefficients) == None, 0, sparsity_coefficients)
+    sparsity_coefficients = [0 if coeff is None else coeff for coeff in sparsity_coefficients]
     
     if update_rule in ["hals", "hals_acc"]:  # Both HALS variants minimise the Frobenius norm
         cost = tl.norm(data-tl.dot(U,V), order=2) ** 2 + 2 * (sparsity_coefficients[0] * tl.norm(U, order=1) + sparsity_coefficients[1] * tl.norm(V, order=1))
