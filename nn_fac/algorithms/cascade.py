@@ -329,7 +329,7 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=10
     return weights_s, A_s, B_is_s, C_s, t
 
 def pf2nmf_cascade_training(Xs, rank, betas, update_rules, n_iters=1, W_is_0=0, n_epoch=100, n_tr_epoch=100, n_te_epoch=30, C_spar_coeff=0.01,
-                        verbose=False, update_order="WH", randomize_ord=True, deterministic=True, return_errors=False):
+                        verbose=False, update_order="WH", randomize_ord=True, conc_mode3=False, deterministic=True, return_errors=False):
     """
     Parameters :
     ------------
@@ -377,7 +377,7 @@ def pf2nmf_cascade_training(Xs, rank, betas, update_rules, n_iters=1, W_is_0=0, 
                 W_is_init = [tl.copy(W_is_s[-1][i]) for i in range(n_reps)]
 
             W_s, H, _, errs = parafac2_nmf(X_reps, rank, betas[step], update_rules[step], n_iters=n_iters[step], Ws_init = W_is_init, n_tr_epoch = n_tr_epoch, n_te_epoch=n_te_epoch, verbose=verbose,
-                    update_order=update_order, sparsity_coefficients=[0.0, C_spar_coeff], deterministic=deterministic, return_errors=True)
+                    update_order=update_order, sparsity_coefficients=[0.0, C_spar_coeff], conc_mode3=conc_mode3, deterministic=deterministic, return_errors=True)
             costs[step].append(errs) # costs[step][k] : errors of the k-th visit of the sample step (see parafac2_nmf)
 
             W_is_s.append(W_s)

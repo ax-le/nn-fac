@@ -3,7 +3,7 @@ import tensorly as tl
 import nn_fac.algorithms.cascade as csc
 
 def parafac2_nmf(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_stepH=100, Ws_init=None, n_tr_epoch=100, n_te_epoch=30, 
-                verbose=False, update_order="WH", sparsity_coefficients=[0.0, 0.0], fixed_modes=[0,0], normalize=[True, False], randomize_ord=True, deterministic=True, return_errors=False):
+                verbose=False, update_order="WH", sparsity_coefficients=[0.0, 0.0], fixed_modes=[0,0], normalize=[True, False], randomize_ord=True, conc_mode3=False, deterministic=True, return_errors=False):
     """
     Obtaining a PARAFAC2 like decomposition by cascading the C^T matrix through multiple NMFs, one for each layer of matrices.
 
@@ -14,6 +14,9 @@ def parafac2_nmf(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_stepH=10
     """
 
     Xs_T = [tl.transpose(X) for X in Xs]
+
+    if conc_mode3 :
+        Xs_T = [tl.concatenate(Xs_T, axis=1)]
 
     if update_order == "HW":
         up_ord = "WH"
@@ -30,6 +33,9 @@ def parafac2_nmf(Xs, rank, betas, update_rules, n_iters, n_stepW=100, n_stepH=10
 
     C = Cs[-1]
     Ws_T_init = None if Ws_init is None else [tl.transpose(W) for W in Ws_init]
+
+    if conc_mode3:
+        Xs_T = [tl.transpose(X) for X in Xs]
 
     Ws_T, ti, test_costs = csc.nmf_cascade_testing(Xs_T, C, rank, betas, update_rules, n_te_epoch, n_stepH=n_stepW, Hs_init=Ws_T_init, verbose=verbose,
                                         return_costs=True, sparsity_coefficient=sparsity_coefficients[1], normalize=normalize[1], deterministic=deterministic)
