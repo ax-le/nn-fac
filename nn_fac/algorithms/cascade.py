@@ -1,4 +1,3 @@
-from nn_fac.parafac2_nmf import parafac2_nmf
 import nn_fac.nmf as nnfacnmf
 import nn_fac.hnmf as nnfachnmf
 import matcouply as mc
@@ -343,6 +342,9 @@ def pf2nmf_cascade_training(Xs, rank, betas, update_rules, n_iters=1, W_is_0=0, 
     Returns :
     ---------
     """
+    # Local import: nn_fac.parafac2_nmf imports this module, a top-level import would be circular.
+    from nn_fac.parafac2_nmf import parafac2_nmf
+
     n_pf2 = len(Xs)
     W_is_s = []
     H_s = []
