@@ -197,7 +197,7 @@ def hnmf_cascade_training(Xs, E, rank, betas, update_rules, n_iters, n_stepS=100
     
     return Ss, Hs, As, t
 
-def pf2_nonneg_factors(estimated_cmf, admm_vars):
+def pf2_nonneg_factors(estimated_cmf, admm_vars, pf2_constr=False):
     """
     Returns the non-negative factors of a PARAFAC2 AO-ADMM decomposition.
 
@@ -212,9 +212,12 @@ def pf2_nonneg_factors(estimated_cmf, admm_vars):
     """
     weights, _ = estimated_cmf
     A_aux_list, B_is_aux_list, C_aux_list = admm_vars.auxes
+    if pf2_constr:
+        return weights, (A_aux_list[0], B_is_aux_list[1], C_aux_list[0])
+
     return weights, (A_aux_list[0], B_is_aux_list[0], C_aux_list[0])
 
-def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=100, C_spar_coeff=0.01,
+def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=100, C_spar_coeff=0.01, pf2_constr=True,
                         verbose=-5, return_costs=True, randomize_ord=True, deterministic=True):
     """
     Parameters :
@@ -284,7 +287,7 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=10
                        non_negative=True,  # Constrain all components to be non-negative
                        l1_penalty={2: C_spar_coeff},  # Sparsity on C
                        l2_norm_bound=[1, 1, 0],  # Norm of A and B_i-component vectors less than 1
-                       parafac2=True,  # Enforce PARAFAC2 constraint
+                       parafac2=pf2_constr,  # Enforce PARAFAC2 constraint
                        #unimodal={1: True},  # Unimodality (one peak) on the B_i component vectors
                        constant_feasibility_penalty=True,  # Must be set to apply l2_norm_penalty (row-penalty) on A. See documentation for more details
                        verbose=verbose,  # Negative verbosity level for minimal (nonzero) printouts
@@ -293,7 +296,7 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=10
                        return_errors=True
                        )
 
-                est_weights, (est_A, est_B_is, est_C) = pf2_nonneg_factors(estimated_cmf, admm_vars)
+                est_weights, (est_A, est_B_is, est_C) = pf2_nonneg_factors(estimated_cmf, admm_vars, pf2_constr=pf2_constr)
                 costs[step] = err
                 A_s.append(est_A)
                 B_is_s.append(est_B_is)
