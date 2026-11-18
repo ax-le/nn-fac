@@ -197,7 +197,7 @@ def hnmf_cascade_training(Xs, E, rank, betas, update_rules, n_iters, n_stepS=100
     
     return Ss, Hs, As, t
 
-def pf2_nonneg_factors(estimated_cmf, admm_vars, pf2_constr=False):
+def pf2_nonneg_factors(estimated_cmf, admm_vars):
     """
     Returns the non-negative factors of a PARAFAC2 AO-ADMM decomposition.
 
@@ -212,10 +212,42 @@ def pf2_nonneg_factors(estimated_cmf, admm_vars, pf2_constr=False):
     """
     weights, _ = estimated_cmf
     A_aux_list, B_is_aux_list, C_aux_list = admm_vars.auxes
-    if pf2_constr:
-        return weights, (A_aux_list[0], B_is_aux_list[1], C_aux_list[0])
 
-    return weights, (A_aux_list[0], B_is_aux_list[0], C_aux_list[0])
+    return weights, (A_aux_list[0], B_is_aux_list[-1], C_aux_list[0])
+
+def pf2_scale_C_init(Xs, A, B_is, C, weights=None):
+    """
+    Rescales C so that the initial reconstruction has the same Frobenius norm as the data :
+    sum_i ||B_i diag(a_i) C^T||^2 = sum_i ||X_i||^2.
+
+    AO-ADMM is slow to recover from a badly scaled initialisation : with uniform [0,1) factors, the initial
+    reconstruction of a normalized spectrogram is ~1e4 times too large, and the factors are still far from
+    converged after 1000 iterations.
+    """
+    A_w = A if weights is None else A * weights
+    rec_sq = sum(tl.norm(tl.dot(B_i * A_w[i], tl.transpose(C))) ** 2 for i, B_i in enumerate(B_is))
+    X_sq = sum(tl.norm(X) ** 2 for X in Xs)
+    if rec_sq > 0:
+        C = C * tl.sqrt(X_sq / rec_sq)
+    return C
+
+def pf2_scaled_random_init(Xs, rank, random_state=None):
+    """
+    Random initialisation of a PARAFAC2 AO-ADMM decomposition at the scale of the data Xs (list of matrices) :
+    A = 1, B_i with unit norm columns (feasible for l2_norm_bound=1), C uniform then rescaled with pf2_scale_C_init.
+    To be used with cmf_aoadmm(init="custom", A_0=A, B_is_0=B_is, C_0=C, aux_init="zeros", dual_init="zeros") :
+    the default random_uniform auxiliary and dual variables would be badly scaled as well.
+    """
+    random_state = tl.check_random_state(random_state)
+    ctx = tl.context(Xs[0])
+    A = tl.ones((len(Xs), rank), **ctx)
+    B_is = []
+    for X in Xs:
+        B_i = tl.tensor(random_state.uniform(size=(tl.shape(X)[0], rank)), **ctx)
+        B_is.append(B_i / tl.norm(B_i, axis=0))
+    C = tl.tensor(random_state.uniform(size=(tl.shape(Xs[0])[1], rank)), **ctx)
+    C = pf2_scale_C_init(Xs, A, B_is, C)
+    return A, B_is, C
 
 def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=100, C_spar_coeff=0.01, pf2_constr=True,
                         verbose=-5, return_costs=True, randomize_ord=True, deterministic=True):
@@ -258,12 +290,14 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=10
             C_init = tl.tensor(random_state.uniform(size=(tl.shape(X_reps[0])[1], rank)), **tl.context(X_reps[0]))
 
             if B_is_s == []:
+                # Random init at the scale of the data (A = 1, unit norm columns for B_i), see pf2_scaled_random_init
+                A_rand, B_is_rand, _ = pf2_scaled_random_init(X_reps, rank, random_state)
                 if type(B_is_0) is int:
-                    B_is_init = [tl.tensor(random_state.uniform(size=(tl.shape(matrix)[0], rank)), **tl.context(matrix)) for matrix in X_reps]
+                    B_is_init = B_is_rand
                 else :
                     B_is_init = [tl.copy(B_is_0[i]) for i in range(n_reps)]
                 if type(A_0) is int:
-                    A_init = tl.tensor(random_state.uniform(size=(n_reps, rank)), **tl.context(X_reps[0]))
+                    A_init = A_rand
                 else :
                     A_init = tl.copy(A_0)
                 weights_init = None
@@ -274,11 +308,15 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=10
                     weights_init = None
                 else :
                     weights_init = tl.copy(weights_s[-1])
+            # C is drawn at each visit : rescaled so that the initial reconstruction matches the norm of the data
+            C_init = pf2_scale_C_init(X_reps, A_init, B_is_init, C_init, weights_init)
             if return_costs:
                 estimated_cmf, admm_vars, err = mc.decomposition.cmf_aoadmm(
                        X_reps,
                        rank=rank,
                        init="custom",
+                       aux_init="zeros",  # random_uniform aux/duals would be badly scaled w.r.t. the data
+                       dual_init="zeros",
                        weights_0=weights_init,
                        A_0=A_init,
                        B_is_0=B_is_init,
@@ -296,7 +334,7 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=10
                        return_errors=True
                        )
 
-                est_weights, (est_A, est_B_is, est_C) = pf2_nonneg_factors(estimated_cmf, admm_vars, pf2_constr=pf2_constr)
+                est_weights, (est_A, est_B_is, est_C) = pf2_nonneg_factors(estimated_cmf, admm_vars)
                 costs[step] = err
                 A_s.append(est_A)
                 B_is_s.append(est_B_is)
@@ -307,6 +345,8 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=10
                         X_reps,
                         rank=rank,
                         init="custom",
+                       aux_init="zeros",  # random_uniform aux/duals would be badly scaled w.r.t. the data
+                       dual_init="zeros",
                         weights_0=weights_init,
                         A_0=A_init,
                         B_is_0=B_is_init,
@@ -315,7 +355,7 @@ def pf2_cascade_training(Xs, rank, betas, n_iters=1, A_0=0, B_is_0=0, n_epoch=10
                         non_negative=True,  # Constrain all components to be non-negative
                         l1_penalty={2: C_spar_coeff},  # Sparsity on C
                         l2_norm_bound=[1, 1, 0],  # Norm of A and B_i-component vectors less than 1
-                        parafac2=True,  # Enforce PARAFAC2 constraint
+                        parafac2=pf2_constr,  # Enforce PARAFAC2 constraint
                         #unimodal={1: True},  # Unimodality (one peak) on the B_i component vectors
                         constant_feasibility_penalty=True,  # Must be set to apply l2_norm_penalty (row-penalty) on A. See documentation for more details
                         verbose=verbose,  # Negative verbosity level for minimal (nonzero) printouts
